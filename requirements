@@ -1,0 +1,9 @@
+peft
+pandas
+ogb
+transformers
+wandb
+sentencepiece
+datasets
+pcst_fast
+gensim

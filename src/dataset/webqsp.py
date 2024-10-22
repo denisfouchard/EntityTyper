@@ -4,7 +4,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 import datasets
 from tqdm import tqdm
-from utils.retrieval import retrieval_via_pcst
+from .utils.retrieval import retrieval_via_pcst
 
 model_name = "sbert"
 path = "dataset/webqsp"

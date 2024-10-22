@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast as autocast
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from torch_scatter import scatter
 from src.model.gnn import load_gnn_model
 from peft import (
     LoraConfig,
@@ -106,12 +105,12 @@ class GraphLLM(torch.nn.Module):
     def encode_graphs(self, samples):
         graphs = samples["graph"]
         graphs = graphs.to(self.model.device)
-        n_embeds, _ = self.graph_encoder(
+        n_embeds: torch.Tensor = self.graph_encoder(
             graphs.x, graphs.edge_index.long(), graphs.edge_attr
-        )
+        )[0]
 
         # mean pooling
-        g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce="mean")
+        g_embeds = n_embeds.scatter(graphs.batch, dim=0, reduce="mean")
 
         return g_embeds
 
