@@ -116,10 +116,52 @@ def get_accuracy_webqsp(path):
     return hit
 
 
+def get_accuracy_dbpedia(path):
+    df = pd.read_json(path, lines=True)
+
+    # Load results
+    acc_list = []
+    hit_list = []
+    f1_list = []
+    precission_list = []
+    recall_list = []
+
+    for prediction, answer in zip(df.pred.tolist(), df.label.tolist()):
+
+        prediction = prediction.replace("|", "\n")
+        answer = answer.split("|")
+
+        prediction = prediction.split("\n")
+        f1_score, precision_score, recall_score = eval_f1(prediction, answer)
+        f1_list.append(f1_score)
+        precission_list.append(precision_score)
+        recall_list.append(recall_score)
+        prediction_str = " ".join(prediction)
+        acc = eval_acc(prediction_str, answer)
+        hit = eval_hit(prediction_str, answer)
+        acc_list.append(acc)
+        hit_list.append(hit)
+
+    acc = sum(acc_list) * 100 / len(acc_list)
+    hit = sum(hit_list) * 100 / len(hit_list)
+    f1 = sum(f1_list) * 100 / len(f1_list)
+    pre = sum(precission_list) * 100 / len(precission_list)
+    recall = sum(recall_list) * 100 / len(recall_list)
+
+    print(f"Accuracy: {acc:.4f}")
+    print(f"Hit: {hit:.4f}")
+    print(f"Precision: {pre:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1: {f1:.4f}")
+
+    return hit
+
+
 eval_funcs = {
     "expla_graphs": get_accuracy_expla_graphs,
     "scene_graphs": get_accuracy_gqa,
     "scene_graphs_baseline": get_accuracy_gqa,
     "webqsp": get_accuracy_webqsp,
     "webqsp_baseline": get_accuracy_webqsp,
+    "dbpedia": get_accuracy_dbpedia,
 }

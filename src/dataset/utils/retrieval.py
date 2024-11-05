@@ -1,20 +1,39 @@
 import torch
 import numpy as np
+import pandas as pd
 from pcst_fast import pcst_fast
 from torch_geometric.data.data import Data
 
 
-def retrieval_via_pcst(
-    graph, q_emb, textual_nodes, textual_edges, topk=3, topk_e=3, cost_e=0.5
-):
+def PCST_retrieve(
+    graph: Data,
+    query_embedding: torch.Tensor,
+    textual_nodes: pd.DataFrame,
+    textual_edges: pd.DataFrame,
+    topk: int = 3,
+    topk_e: int = 3,
+    cost_e: float = 0.5,
+) -> tuple[Data, str]:
+    """
+    From a given query, and the graph containing the answer to the query,
+    finds the subgraph that maximizes the cosine similarity between :
+    - the query and the nodes of the subgraph.
+    - the query and the edges of the subgraph.
+
+    Args:
+    - graph: Data object containing the graph.
+    - q_emb: torch.Tensor of shape (d,) containing the query embedding.
+    - textual_nodes: pd.DataFrame containing the textual information of the nodes.
+    - textual_edges: pd.DataFrame containing the textual information of the edges.
+    - topk: int, default 3, maximum deph of the subgraph.
+    - topk_e: int, default 3.
+    """
     c = 0.01
     if len(textual_nodes) == 0 or len(textual_edges) == 0:
         desc = (
             textual_nodes.to_csv(index=False)
             + "\n"
-            + textual_edges.to_csv(
-                index=False, columns=["src", "edge_attr", "dst"]
-            )
+            + textual_edges.to_csv(index=False, columns=["src", "edge_attr", "dst"])
         )
         graph = Data(
             x=graph.x,
@@ -29,7 +48,7 @@ def retrieval_via_pcst(
     pruning = "gw"
     verbosity_level = 0
     if topk > 0:
-        n_prizes = torch.nn.CosineSimilarity(dim=-1)(q_emb, graph.x)
+        n_prizes = torch.nn.CosineSimilarity(dim=-1)(query_embedding, graph.x)
         topk = min(topk, graph.num_nodes)
         _, topk_n_indices = torch.topk(n_prizes, topk, largest=True)
 
@@ -39,7 +58,7 @@ def retrieval_via_pcst(
         n_prizes = torch.zeros(graph.num_nodes)
 
     if topk_e > 0:
-        e_prizes = torch.nn.CosineSimilarity(dim=-1)(q_emb, graph.edge_attr)
+        e_prizes = torch.nn.CosineSimilarity(dim=-1)(query_embedding, graph.edge_attr)
         topk_e = min(topk_e, e_prizes.unique().size(0))
 
         topk_e_values, _ = torch.topk(e_prizes.unique(), topk_e, largest=True)
@@ -97,9 +116,7 @@ def retrieval_via_pcst(
 
     edge_index = graph.edge_index[:, selected_edges]
     selected_nodes = np.unique(
-        np.concatenate(
-            [selected_nodes, edge_index[0].numpy(), edge_index[1].numpy()]
-        )
+        np.concatenate([selected_nodes, edge_index[0].numpy(), edge_index[1].numpy()])
     )
 
     n = textual_nodes.iloc[selected_nodes]

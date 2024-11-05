@@ -8,6 +8,8 @@ from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_kbit_training,
+    PeftModel,
+    PeftConfig,
 )
 
 BOS = "<s>[INST]"
@@ -26,8 +28,12 @@ class GraphLLM(torch.nn.Module):
 
         print("Loading LLAMA")
         kwargs = {
-            "max_memory": {0: "80GiB", 1: "80GiB"},
             "device_map": "auto",
+            "max_memory": {
+                0: "30GiB",
+                1: "15GiB",
+                2: "15GiB",
+            },
             "revision": "main",
         }
 
@@ -109,8 +115,25 @@ class GraphLLM(torch.nn.Module):
             graphs.x, graphs.edge_index.long(), graphs.edge_attr
         )[0]
 
-        # mean pooling
-        g_embeds = n_embeds.scatter(graphs.batch, dim=0, reduce="mean")
+        # mean pooling using vanilla PyTorch
+        batch_size = graphs.batch.max().item() + 1
+        g_embeds_sum = torch.zeros(
+            batch_size, n_embeds.size(1), device=n_embeds.device
+        )
+        g_embeds_count = torch.zeros(batch_size, device=n_embeds.device)
+
+        g_embeds_sum.scatter_add_(
+            0, graphs.batch.unsqueeze(-1).expand_as(n_embeds), n_embeds
+        )
+        g_embeds_count.scatter_add_(
+            0,
+            graphs.batch,
+            torch.ones_like(
+                graphs.batch, device=n_embeds.device, dtype=torch.float
+            ),
+        )
+
+        g_embeds = g_embeds_sum / g_embeds_count.unsqueeze(-1)
 
         return g_embeds
 

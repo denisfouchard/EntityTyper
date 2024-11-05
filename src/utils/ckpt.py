@@ -20,11 +20,9 @@ def _save_checkpoint(model, optimizer, cur_epoch, args, is_best=False):
     """
     Save the checkpoint at the current epoch.
     """
-    os.makedirs(f'{args.output_dir}/{args.dataset}', exist_ok=True)
+    os.makedirs(f"{args.output_dir}/{args.dataset}", exist_ok=True)
 
-    param_grad_dic = {
-        k: v.requires_grad for (k, v) in model.named_parameters()
-    }
+    param_grad_dic = {k: v.requires_grad for (k, v) in model.named_parameters()}
     state_dict = model.state_dict()
     for k in list(state_dict.keys()):
         if k in param_grad_dic.keys() and not param_grad_dic[k]:
@@ -45,7 +43,7 @@ def _reload_best_model(model, args):
     """
     Load the best checkpoint for evaluation.
     """
-    checkpoint_path = f'{args.output_dir}/{args.dataset}/model_name_{args.model_name}_llm_model_name_{args.llm_model_name}_llm_frozen_{args.llm_frozen}_max_txt_len_{args.max_txt_len}_max_new_tokens_{args.max_new_tokens}_gnn_model_name_{args.gnn_model_name}_patience_{args.patience}_num_epochs_{args.num_epochs}_seed{args.seed}_checkpoint_best.pth'
+    checkpoint_path = f"{args.output_dir}/{args.dataset}/model_name_{args.model_name}_llm_model_name_{args.llm_model_name}_llm_frozen_{args.llm_frozen}_max_txt_len_{args.max_txt_len}_max_new_tokens_{args.max_new_tokens}_gnn_model_name_{args.gnn_model_name}_patience_{args.patience}_num_epochs_{args.num_epochs}_seed{args.seed}_checkpoint_best.pth"
 
     print("Loading checkpoint from {}.".format(checkpoint_path))
 

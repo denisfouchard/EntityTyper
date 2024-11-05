@@ -1,19 +1,26 @@
+# %%
 import os
 import torch
 import pandas as pd
 from torch.utils.data import Dataset
 import datasets
 from tqdm import tqdm
-from .utils.retrieval import retrieval_via_pcst
+from src.dataset.utils.retrieval import retrieval_via_pcst
 
-model_name = "sbert"
-path = "dataset/webqsp"
-path_nodes = f"{path}/nodes"
-path_edges = f"{path}/edges"
-path_graphs = f"{path}/graphs"
+# Remove warnings
+import warnings
 
-cached_graph = f"{path}/cached_graphs"
-cached_desc = f"{path}/cached_desc"
+warnings.filterwarnings("ignore")
+
+PATH = "/home/infres/dfouchard-21/G-Retriever/dataset/webqsp"
+path_nodes = f"{PATH}/nodes"
+path_edges = f"{PATH}/edges"
+path_graphs = f"{PATH}/graphs"
+
+cached_graph = f"{PATH}/cached_graphs"
+cached_desc = f"{PATH}/cached_desc"
+
+device = torch.device("cuda:0")
 
 
 class WebQSPDataset(Dataset):
@@ -22,11 +29,11 @@ class WebQSPDataset(Dataset):
         self.prompt = "Please answer the given question."
         self.graph = None
         self.graph_type = "Knowledge Graph"
-        dataset = datasets.load_dataset("rmanluo/RoG-webqsp")
+        dataset = torch.load(f"{PATH}/sampled_dataset.pt", map_location=device)
         self.dataset = datasets.concatenate_datasets(
             [dataset["train"], dataset["validation"], dataset["test"]]
         )
-        self.q_embs = torch.load(f"{path}/q_embs.pt")
+        self.q_embs = torch.load(f"{PATH}/q_embs.pt", map_location=device)
 
     def __len__(self):
         """Return the len of the dataset."""
@@ -48,13 +55,12 @@ class WebQSPDataset(Dataset):
         }
 
     def get_idx_split(self):
-
         # Load the saved indices
-        with open(f"{path}/split/train_indices.txt", "r") as file:
+        with open(f"{PATH}/split/train_indices.txt", "r") as file:
             train_indices = [int(line.strip()) for line in file]
-        with open(f"{path}/split/val_indices.txt", "r") as file:
+        with open(f"{PATH}/split/val_indices.txt", "r") as file:
             val_indices = [int(line.strip()) for line in file]
-        with open(f"{path}/split/test_indices.txt", "r") as file:
+        with open(f"{PATH}/split/test_indices.txt", "r") as file:
             test_indices = [int(line.strip()) for line in file]
 
         return {
@@ -64,16 +70,13 @@ class WebQSPDataset(Dataset):
         }
 
 
-def preprocess():
+# %%
+if __name__ == "__main__":
+    # Create the cached directories
     os.makedirs(cached_desc, exist_ok=True)
     os.makedirs(cached_graph, exist_ok=True)
-    dataset = datasets.load_dataset("rmanluo/RoG-webqsp")
-    dataset = datasets.concatenate_datasets(
-        [dataset["train"], dataset["validation"], dataset["test"]]
-    )
-
-    q_embs = torch.load(f"{path}/q_embs.pt")
-    for index in tqdm(range(len(dataset))):
+    q_embs = torch.load(f"{PATH}/q_embs.pt")
+    for index in tqdm(range(100)):
         if os.path.exists(f"{cached_graph}/{index}.pt"):
             continue
         graph = torch.load(f"{path_graphs}/{index}.pt")
@@ -86,17 +89,12 @@ def preprocess():
         torch.save(subg, f"{cached_graph}/{index}.pt")
         open(f"{cached_desc}/{index}.txt", "w").write(desc)
 
-
-if __name__ == "__main__":
-
-    preprocess()
-
-    dataset = WebQSPDataset()
-
-    data = dataset[1]
+    webqspdataset = WebQSPDataset()
+    # %%
+    data = webqspdataset[1]
     for k, v in data.items():
         print(f"{k}: {v}")
 
-    split_ids = dataset.get_idx_split()
+    split_ids = webqspdataset.get_idx_split()
     for k, v in split_ids.items():
         print(f"# {k}: {len(v)}")

@@ -70,6 +70,7 @@ Replace path to the llm checkpoints in the `src/model/__init__.py`, then run
 ### 1) Inference-Only LLM
 ```
 python inference.py --dataset scene_graphs --model_name inference_llm --llm_model_name 7b_chat
+python inference.py --dataset webqsp --model_name inference_llm --llm_model_name 7b_chat
 ```
 ### 2) Frozen LLM + Prompt Tuning
 ```
@@ -87,7 +88,17 @@ python train.py --dataset scene_graphs_baseline --model_name llm --llm_frozen Fa
 
 # G-Retriever with LoRA
 python train.py --dataset scene_graphs --model_name graph_llm --llm_frozen False
+python train.py --dataset webqsp --model_name graph_llm --llm_frozen False
 ```
+
 
 ## Reproducibility
 Use `run.sh` to run the codes and reproduce the published results in the main table.
+
+
+
+## Testing Finetuned model
+
+```
+python inference.py --dataset dbpedia --model_name graph_llm --llm_model_name 3-8b
+```

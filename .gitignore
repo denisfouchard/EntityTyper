@@ -68,3 +68,12 @@ output/
 wandb/
 
 .vscode/
+lib64
+pyvenv.cfg
+share/man/man1/isympy.1
+share/man/man1/ipython.1
+share/jupyter/kernels/python3/kernel.json
+.gitignore
+share/jupyter/kernels/python3/logo-32x32.png
+share/jupyter/kernels/python3/logo-64x64.png
+share/jupyter/kernels/python3/logo-svg.svg
