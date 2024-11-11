@@ -1,25 +1,24 @@
+"""Training script for the GraphLLMClassifier model"""
+
 import os
 import wandb
 import gc
 from tqdm import tqdm
 import torch
-import json
-import pandas as pd
 from torch.utils.data import DataLoader
-from torch.nn.utils import clip_grad_norm_
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 
+# from torch.nn.utils import clip_grad_norm_
 from src.model import llama_model_path
 from src.model.graph_llm_classifier import GraphLLMClassifier
 from src.dataset.dbpedia import DBPediaDataset
-from src.utils.evaluate import get_accuracy_dbpedia
 from src.config import parse_args_llama
-from src.utils.ckpt import _save_checkpoint, _reload_best_model
+from src.utils.ckpt import _save_checkpoint
 from src.utils.collate import collate_fn
 from src.utils.seed import seed_everything
-from src.utils.lr_schedule import adjust_learning_rate
 from src.dataset.utils.mapping import generate_hierarchical_mapping
 
+# Define the number of classes, and do one-hot encoding for the labels
 
 class2idx, idx2class = generate_hierarchical_mapping(
     file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/hierarchy_ids.txt"
@@ -40,6 +39,7 @@ def batch_one_hot_encode(y_str: list[str], num_classes):
 
 
 def main(args):
+    scaler = GradScaler()
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -93,7 +93,7 @@ def main(args):
     print("Loaded model on device", model.device)
 
     # Step 4.a Set loss function
-    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = torch.nn.CrossEntropyLoss()
 
     # Step 4.b Set Optimizer
     params = [p for _, p in model.named_parameters() if p.requires_grad]
@@ -127,27 +127,34 @@ def main(args):
                 for k, v in batch.items()
             }
 
-            optimizer.zero_grad()
-            y_true = batch_one_hot_encode(batch["label"], n_classes).to(model.device)
             # Use autocast for mixed precision
-            with torch.amp.autocast(device_type="cuda"):
-                logits = model(batch)
-                loss = criterion(logits, y_true)
+            # y_true = batch_one_hot_encode(batch["label"], n_classes).to(model.device)
+            y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(
+                model.device
+            )
+            with autocast(device_type="cuda"):
+                outputs = model(batch)
+                loss = criterion(outputs, y_true)
 
-            # Scale the loss and perform backward pass
-            # scaler.scale(loss).backward()
-            # scaler.step(optimizer)
-            # scaler.update()
-            loss.backward()
-            optimizer.step()
+            # Backward pass
+            scaler.scale(loss).backward()
+
+            # torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]["params"], 0.1)
 
             epoch_loss += loss.item()
             accum_loss += loss.item()
 
             if (step + 1) % args.grad_steps == 0:
+                print("Accumulated Loss", accum_loss)
+                # Update model parameters
+                scaler.step(optimizer)
+                scaler.update()
+                # optimizer.step()
+                optimizer.zero_grad()
+                # Clear accumulated gradients
                 lr = optimizer.param_groups[0]["lr"]
                 wandb.log({"Lr": lr})
-                wandb.log({"Accum Loss": accum_loss / args.grad_steps})
+                wandb.log({"Accum Loss": accum_loss})
                 accum_loss = 0.0
 
             progress_bar.update(1)
@@ -165,12 +172,12 @@ def main(args):
                 # Move the batch to the correct device
 
                 # Use autocast for mixed precision
-                with torch.amp.autocast(device_type="cuda"):
-                    output = model(batch)
-                    y_true = batch_one_hot_encode(batch["label"], n_classes).to(
-                        model.device
-                    )
-                    loss = criterion(output, y_true)
+                # with autocast(device_type="cuda"):
+                output = model(batch)
+                y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(
+                    model.device
+                )
+                loss = criterion(output, y_true)
                 val_loss += loss.item()
             val_loss = val_loss / len(val_loader)
             print(f"Epoch: {epoch}|{args.num_epochs}: Val Loss: {val_loss}")
@@ -202,7 +209,7 @@ def main(args):
         with torch.no_grad():
             output: torch.Tensor = model.predict(batch)
             y_true = [class2idx[c] for c in batch["label"]]
-            y_true = torch.tensor(y_true).to(model.device)
+            y_true: torch.Tensor = torch.tensor(y_true).to(model.device)
             batch_accuracy = torch.mean((output == y_true).float())
             test_accuracies.append(batch_accuracy.item())
         progress_bar_test.update(1)
@@ -214,7 +221,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-
+    torch.cuda.empty_cache()
     args = parse_args_llama()
 
     main(args)

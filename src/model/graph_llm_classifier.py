@@ -61,7 +61,6 @@ class GraphLLMClassifier(torch.nn.Module):
 
         language_model = AutoModelForCausalLM.from_pretrained(
             args.llm_model_path,
-            torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             **kwargs,
         )
@@ -70,12 +69,17 @@ class GraphLLMClassifier(torch.nn.Module):
         language_model.config.is_decoder = (
             False  # Disable decoding since it's not needed for classification
         )
+
+        # Add a custom classification head
+
         self.classifier = CustomClassificationMLP(
             input_dim=4096, hidden_dim=2048, num_classes=n_classes
         ).to(
             language_model.device,
-            dtype=torch.float16,
         )
+
+        # Remove the head of the model from trainable parameters
+        # language_model.lm_head = nn.Identity()
 
         print(
             "After replacing the head, the LLM is now on device", language_model.device
@@ -241,13 +245,13 @@ class GraphLLMClassifier(torch.nn.Module):
             last_hidden_state = last_hidden_state.to(
                 self.classifier.mlp[0].weight.device
             )
-            logits = self.classifier(last_hidden_state)
-        return logits
+            outputs = self.classifier(last_hidden_state)
+        return outputs
 
     def predict(self, samples):
         with torch.no_grad():
-            logits = self.forward(samples)
-            return torch.argmax(logits, dim=-1)
+            outputs = self.forward(samples)
+            return torch.argmax(outputs, dim=-1)
 
     def print_trainable_params(self):
         trainable_params = 0
