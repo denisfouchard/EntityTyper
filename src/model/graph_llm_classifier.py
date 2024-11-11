@@ -1,7 +1,5 @@
-import contextlib
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast as autocast
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -11,8 +9,6 @@ from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_kbit_training,
-    PeftModel,
-    PeftConfig,
 )
 
 BOS = "<s>[INST]"
@@ -20,9 +16,6 @@ EOS_USER = "[/INST]"
 EOS = "</s>"
 
 IGNORE_INDEX = -100
-
-from src.config import parse_args_llama
-from src.model import llama_model_path
 
 
 class CustomClassificationMLP(nn.Module):
@@ -77,7 +70,16 @@ class GraphLLMClassifier(torch.nn.Module):
         language_model.config.is_decoder = (
             False  # Disable decoding since it's not needed for classification
         )
-        language_model.lm_head = None  # Remove the last LM head layer
+        self.classifier = CustomClassificationMLP(
+            input_dim=4096, hidden_dim=2048, num_classes=n_classes
+        ).to(
+            language_model.device,
+            dtype=torch.float16,
+        )
+
+        print(
+            "After replacing the head, the LLM is now on device", language_model.device
+        )
 
         if args.llm_frozen == "True":
             print("Freezing LLAMA!")
@@ -121,25 +123,11 @@ class GraphLLMClassifier(torch.nn.Module):
             nn.Linear(2048, 4096),
         ).to(self.language_model.device)
 
-        self.classifier = CustomClassificationMLP(
-            input_dim=4096, hidden_dim=2048, num_classes=n_classes
-        ).to(self.language_model.device)
-
         self.word_embedding = self.language_model.model.get_input_embeddings()
 
     @property
     def device(self):
         return list(self.parameters())[0].device
-
-    def maybe_autocast(self, dtype=torch.bfloat16):
-        # if on cpu, don't use autocast
-        # if on gpu, use autocast with dtype if provided, otherwise use torch.float16
-        enable_autocast = self.device != torch.device("cpu")
-
-        if enable_autocast:
-            return torch.cuda.amp.autocast(dtype=dtype)
-        else:
-            return contextlib.nullcontext()
 
     def encode_graphs(self, samples):
         graphs = samples["graph"]
@@ -167,7 +155,6 @@ class GraphLLMClassifier(torch.nn.Module):
         return g_embeds
 
     def forward(self, samples):
-
         # encode description, questions and labels
         questions = self.tokenizer(samples["question"], add_special_tokens=False)
         descriptions = self.tokenizer(samples["desc"], add_special_tokens=False)
@@ -242,19 +229,25 @@ class GraphLLMClassifier(torch.nn.Module):
 
         # Take the representation of the last hidden state
 
-        with self.maybe_autocast():
+        with torch.amp.autocast(device_type="cuda"):
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
+                output_hidden_states=True,
                 return_dict=True,
                 labels=label_input_ids,
             )
-            # Extract last hidden state
             last_hidden_state = outputs.hidden_states[-1]
-            # Pass last hidden state through the custom MLP head for classification
+            last_hidden_state = last_hidden_state.to(
+                self.classifier.mlp[0].weight.device
+            )
             logits = self.classifier(last_hidden_state)
-
         return logits
+
+    def predict(self, samples):
+        with torch.no_grad():
+            logits = self.forward(samples)
+            return torch.argmax(logits, dim=-1)
 
     def print_trainable_params(self):
         trainable_params = 0
@@ -271,6 +264,8 @@ class GraphLLMClassifier(torch.nn.Module):
 
 
 if __name__ == "__main__":
+    from src.config import parse_args_llama
+    from src.model import llama_model_path
 
     args = parse_args_llama()
     args.llm_model_path = llama_model_path[args.llm_model_name]
@@ -279,3 +274,4 @@ if __name__ == "__main__":
     trainable_params, all_param = model.print_trainable_params()
     print(f"Trainable params: {trainable_params}, All params: {all_param}")
     print("Done!")
+    print(model.device)

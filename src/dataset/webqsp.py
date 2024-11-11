@@ -5,7 +5,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 import datasets
 from tqdm import tqdm
-from src.dataset.utils.retrieval import retrieval_via_pcst
+from src.dataset.utils.retrieval import PCST_retrieve
 
 # Remove warnings
 import warnings
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         nodes = pd.read_csv(f"{path_nodes}/{index}.csv")
         edges = pd.read_csv(f"{path_edges}/{index}.csv")
         q_emb = q_embs[index]
-        subg, desc = retrieval_via_pcst(
+        subg, desc = PCST_retrieve(
             graph, q_emb, nodes, edges, topk=3, topk_e=5, cost_e=0.5
         )
         torch.save(subg, f"{cached_graph}/{index}.pt")
