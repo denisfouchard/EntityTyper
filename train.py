@@ -7,6 +7,7 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from torch.amp import autocast, GradScaler
+from transformers import Trainer, TrainingArguments
 
 # from torch.nn.utils import clip_grad_norm_
 from src.model import llama_model_path
@@ -25,9 +26,6 @@ class2idx, idx2class = generate_hierarchical_mapping(
 )
 
 n_classes = len(idx2class)
-print("Number of classes", n_classes)
-print("Min class", min(class2idx.values()))
-print("Max class", max(class2idx.values()))
 
 
 # Define the number of classes, and do one-hot encoding for the labels
@@ -87,9 +85,7 @@ def main(args):
     )
     # Step 3: Build Model
     args.llm_model_path = llama_model_path[args.llm_model_name]
-    model = GraphLLMClassifier(
-        graph_type=dataset.graph_type, args=args, n_classes=n_classes
-    )
+    model = GraphLLMClassifier(args=args, n_classes=n_classes)
     print("Loaded model on device", model.device)
 
     # Step 4.a Set loss function
@@ -114,6 +110,29 @@ def main(args):
     best_val_loss = float("inf")
     best_epoch = 0
 
+    training_args = TrainingArguments(
+        output_dir=f"{args.output_dir}/{args.dataset}",
+        num_train_epochs=args.num_epochs,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.eval_batch_size,
+        gradient_accumulation_steps=args.grad_steps,
+        gradient_checkpointing=True,
+        fp16=True,
+        eval_steps=100,
+        logging_steps=100,
+        no_cuda=True,
+        use_cpu=False,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        data_collator=collate_fn,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        optimizers=(optimizer, None),
+    )
+
     for epoch in range(args.num_epochs):
 
         model.train()
@@ -132,30 +151,29 @@ def main(args):
             y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(
                 model.device
             )
-            with autocast(device_type="cuda"):
-                outputs = model(batch)
-                loss = criterion(outputs, y_true)
+            batch["label"] = y_true
 
+            inputs = {"samples": batch}
+            loss = trainer.training_step(model=model, inputs=inputs)
             # Backward pass
-            scaler.scale(loss).backward()
-
-            # torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]["params"], 0.1)
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
 
             epoch_loss += loss.item()
             accum_loss += loss.item()
 
-            if (step + 1) % args.grad_steps == 0:
-                print("Accumulated Loss", accum_loss)
-                # Update model parameters
-                scaler.step(optimizer)
-                scaler.update()
-                # optimizer.step()
-                optimizer.zero_grad()
-                # Clear accumulated gradients
-                lr = optimizer.param_groups[0]["lr"]
-                wandb.log({"Lr": lr})
-                wandb.log({"Accum Loss": accum_loss})
-                accum_loss = 0.0
+            print("Accumulated Loss", accum_loss)
+            # Update model parameters
+            scaler.step(optimizer)
+            scaler.update()
+            # optimizer.step()
+            optimizer.zero_grad()
+            # Clear accumulated gradients
+            lr = optimizer.param_groups[0]["lr"]
+            wandb.log({"Lr": lr})
+            wandb.log({"Accum Loss": accum_loss})
+            accum_loss = 0.0
 
             progress_bar.update(1)
 
@@ -221,6 +239,9 @@ def main(args):
 
 
 if __name__ == "__main__":
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
     torch.cuda.empty_cache()
     args = parse_args_llama()
 
