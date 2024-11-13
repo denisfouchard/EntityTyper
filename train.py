@@ -87,9 +87,7 @@ def main(args):
     )
     # Step 3: Build Model
     args.llm_model_path = llama_model_path[args.llm_model_name]
-    model = GraphLLMClassifier(
-        graph_type=dataset.graph_type, args=args, n_classes=n_classes
-    )
+    model = GraphLLMClassifier(args=args, n_classes=n_classes)
     print("Loaded model on device", model.device)
 
     # Step 4.a Set loss function
@@ -128,7 +126,6 @@ def main(args):
             }
 
             # Use autocast for mixed precision
-            # y_true = batch_one_hot_encode(batch["label"], n_classes).to(model.device)
             y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(
                 model.device
             )
