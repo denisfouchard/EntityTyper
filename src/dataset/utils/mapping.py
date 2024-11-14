@@ -57,13 +57,3 @@ def generate_hierarchical_mapping(
         idx2class.append(hierarchical_type_name)
 
     return class2idx, idx2class
-
-
-class2idx, idx2class = generate_hierarchical_mapping(
-    file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/hierarchy_ids.txt"
-)
-
-if __name__ == "__main__":
-
-    for key, value in x.items():
-        print(key, value)

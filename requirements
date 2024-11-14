@@ -1,3 +1,6 @@
+numpy
+torch
+torch_geometric
 peft
 pandas
 ogb

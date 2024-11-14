@@ -40,7 +40,7 @@ class DBPediaDataset(Dataset):
         question = f'Question: {data["question"]}\nAnswer: '
         graph = torch.load(f"{cached_graph}/{index}.pt")
         desc = open(f"{cached_desc}/{index}.txt", "r").read()
-        label = ("|").join(data["answer"]).lower()
+        label = data["answer"]
 
         return {
             "id": index,
