@@ -21,19 +21,19 @@ IGNORE_INDEX = -100
 class CustomClassificationMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes):
         super().__init__()
-        self.mlp = nn.Sequential(
+        self.mlp: nn.Module = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, num_classes),
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> torch.Tensor:
         # Take the last hidden state
         last_hidden_state = hidden_states[:, -1, :]
         return self.mlp(last_hidden_state)
 
 
-class GraphLLMClassifier(torch.nn.Module):
+class GraphLLMClassifier(nn.Module):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()
@@ -44,9 +44,7 @@ class GraphLLMClassifier(torch.nn.Module):
         kwargs = {
             "device_map": "auto",
             "max_memory": {
-                0: "16GiB",
-                1: "32GiB",
-                2: "16GiB",
+                0: "25GiB",
             },
             "revision": "main",
         }
@@ -59,19 +57,16 @@ class GraphLLMClassifier(torch.nn.Module):
         self.tokenizer.pad_token_id = 0
         self.tokenizer.padding_side = "left"
 
-        language_model = LlamaModel.from_pretrained(
+        language_model: LlamaModels = LlamaModel.from_pretrained(
             args.llm_model_path,
             low_cpu_mem_usage=True,
+            load_in_8bit=True,
             **kwargs,
         )
 
         # Remove the original final layer
         language_model.config.is_decoder = (
             False  # Disable decoding since it's not needed for classification
-        )
-
-        print(
-            "After replacing the head, the LLM is now on device", language_model.device
         )
 
         if args.llm_frozen == "True":
@@ -101,7 +96,7 @@ class GraphLLMClassifier(torch.nn.Module):
         self.language_model = language_model
         print("Finish loading LLAMA!")
 
-        self.graph_encoder = GNN_MODEL_MAPPING[args.gnn_model_name](
+        self.graph_encoder: nn.Module = GNN_MODEL_MAPPING[args.gnn_model_name](
             in_channels=args.gnn_in_dim,
             out_channels=args.gnn_hidden_dim,
             hidden_channels=args.gnn_hidden_dim,
@@ -110,15 +105,15 @@ class GraphLLMClassifier(torch.nn.Module):
             num_heads=args.gnn_num_heads,
         ).to(self.language_model.device)
 
-        self.projector = nn.Sequential(
+        self.projector: nn.Module = nn.Sequential(
             nn.Linear(args.gnn_hidden_dim, 2048),
             nn.Sigmoid(),
             nn.Linear(2048, 4096),
         ).to(self.language_model.device)
 
-        self.classifier = CustomClassificationMLP(
+        self.classifier: CustomClassificationMLP = CustomClassificationMLP(
             input_dim=4096,
-            hidden_dim=300,
+            hidden_dim=1024,
             num_classes=n_classes,
         ).to(self.language_model.device)
 
@@ -167,12 +162,8 @@ class GraphLLMClassifier(torch.nn.Module):
 
         return g_embeds
 
-    def forward(self, samples):
+    def forward(self, samples) -> torch.Tensor:
         # encode description, questions and labels
-        samples = {
-            k: v.to(model.device) if isinstance(v, torch.Tensor) else v
-            for k, v in samples.items()
-        }
         questions = self.tokenizer(samples["question"], add_special_tokens=False)
         descriptions = self.tokenizer(samples["desc"], add_special_tokens=False)
 
@@ -180,12 +171,12 @@ class GraphLLMClassifier(torch.nn.Module):
         # eos_tokens = self.tokenizer(EOS, add_special_tokens=False)
         eos_user_tokens = self.tokenizer(EOS_USER, add_special_tokens=False)
         bos_embeds = self.word_embedding(
-            self.tokenizer(
-                BOS, add_special_tokens=False, return_tensors="pt"
-            ).input_ids[0]
+            self.tokenizer(BOS, add_special_tokens=False, return_tensors="pt")
+            .input_ids[0]
+            .to(self.language_model.device)
         )
         pad_embeds = self.word_embedding(
-            torch.tensor(self.tokenizer.pad_token_id)
+            torch.tensor(self.tokenizer.pad_token_id).to(self.language_model.device)
         ).unsqueeze(0)
 
         # encode graphs
@@ -236,16 +227,16 @@ class GraphLLMClassifier(torch.nn.Module):
             return_dict=True,
         ).last_hidden_state
 
-        output = self.classifier(hidden_states)
+        output = self.classifier.forward(hidden_states)
 
         return output
 
-    def predict(self, samples):
+    def predict(self, samples) -> torch.Tensor:
         with torch.no_grad():
             outputs = self.forward(samples)
             return torch.argmax(outputs, dim=-1)
 
-    def print_trainable_params(self):
+    def print_trainable_params(self) -> tuple[int, int]:
         trainable_params = 0
         all_param = 0
 
@@ -257,6 +248,15 @@ class GraphLLMClassifier(torch.nn.Module):
                 trainable_params += num_params
 
         return trainable_params, all_param
+
+    @staticmethod
+    def from_pretrained(args, n_classes, model_path) -> "GraphLLMClassifier":
+        print(f"Loading model from {model_path}")
+        trained_graph_classifier = GraphLLMClassifier(args, n_classes)
+        checkpoint = torch.load(model_path)
+        trained_graph_classifier.load_state_dict(checkpoint["model"], strict=False)
+        print("Loaded model from checkpoint!")
+        return trained_graph_classifier
 
 
 if __name__ == "__main__":

@@ -1,17 +1,3 @@
-from src.model.llm import LLM
-from src.model.pt_llm import PromptTuningLLM
-from src.model.graph_llm import GraphLLM
-from src.model.graph_llm_classifier import GraphLLMClassifier
-
-
-load_model = {
-    "llm": LLM,
-    "inference_llm": LLM,
-    "pt_llm": PromptTuningLLM,
-    "graph_llm": GraphLLM,
-    "graph_llm_classifier": GraphLLMClassifier,
-}
-
 # Replace the following with the model paths
 llama_model_path = {
     "3-8b": "meta-llama/Meta-Llama-3-8B",

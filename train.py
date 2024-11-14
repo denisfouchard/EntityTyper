@@ -1,20 +1,14 @@
 """Training script for the GraphLLMClassifier model"""
 
 import os
+import torch
 import wandb
 import gc
+from argparse import Namespace
 from tqdm import tqdm
-import torch
-from transformers import AutoModelForCausalLM
 from accelerate import infer_auto_device_map, dispatch_model
-
-import time
-
-# Automatically infer and prefer GPU with the most free memory
 from torch.utils.data import DataLoader
-from torch.amp import autocast, GradScaler
-
-# from torch.nn.utils import clip_grad_norm_
+from torch.amp import autocast
 from src.model import llama_model_path
 from src.model.graph_llm_classifier import GraphLLMClassifier
 from src.dataset.dbpedia import DBPediaDataset
@@ -22,18 +16,15 @@ from src.config import parse_args_llama
 from src.utils.ckpt import _save_checkpoint
 from src.utils.collate import collate_fn
 from src.utils.seed import seed_everything
+from src.utils.lr_schedule import adjust_learning_rate
 from src.dataset.utils.mapping import generate_hierarchical_mapping
+from src.dataset.utils.dataloader import dataset_loader
 
 # Define the number of classes, and do one-hot encoding for the labels
-
 class2idx, idx2class = generate_hierarchical_mapping(
     file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/hierarchy_ids.txt"
 )
-
 n_classes = len(idx2class)
-print("Number of classes", n_classes)
-print("Min class", min(class2idx.values()))
-print("Max class", max(class2idx.values()))
 
 
 # Define the number of classes, and do one-hot encoding for the labels
@@ -44,9 +35,7 @@ def batch_one_hot_encode(y_str: list[str], num_classes):
     return one_hot
 
 
-def main(args):
-    scaler = GradScaler()
-
+def main(args: Namespace) -> None:
     gc.collect()
     torch.cuda.empty_cache()
     # Step 1: Set up wandb
@@ -60,40 +49,17 @@ def main(args):
     seed_everything(seed=args.seed)
 
     dataset = DBPediaDataset()
-    idx_split = dataset.get_idx_split()
-
-    # Step 2: Build Node Classification Dataset
-    train_dataset = [dataset[i] for i in idx_split["train"]]
-    val_dataset = [dataset[i] for i in idx_split["val"]]
-    test_dataset = [dataset[i] for i in idx_split["test"]]
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        drop_last=True,
-        pin_memory=True,
-        shuffle=True,
-        collate_fn=collate_fn,
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size,
-        drop_last=False,
-        pin_memory=True,
-        shuffle=False,
-        collate_fn=collate_fn,
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=args.eval_batch_size,
-        drop_last=False,
-        pin_memory=True,
-        shuffle=False,
-        collate_fn=collate_fn,
+    train_loader, val_loader, test_loader = dataset_loader(
+        dataset=dataset, args=args, collate_fn=collate_fn
     )
     # Step 3: Build Model
     args.llm_model_path = llama_model_path[args.llm_model_name]
-    model = GraphLLMClassifier(args=args, n_classes=n_classes)
+    if args.checkpoint_path != "":
+        model = GraphLLMClassifier.from_pretrained(
+            args=args, n_classes=n_classes, model_path=args.checkpoint_path
+        )
+    else:
+        model = GraphLLMClassifier(args=args, n_classes=n_classes)
 
     accelerate = False
     if accelerate:
@@ -137,11 +103,23 @@ def main(args):
             )
 
             with autocast(device_type="cuda", dtype=torch.float16):
+                batch = {
+                    k: v.to(model.device) if isinstance(v, torch.Tensor) else v
+                    for k, v in batch.items()
+                }
                 outputs = model(batch)
                 loss = criterion(outputs, y_true)
                 loss.backward()
 
-            # torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]["params"], 0.1)
+            torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]["params"], 0.1)
+
+            if (step + 1) % args.grad_steps == 0:
+                adjust_learning_rate(
+                    optimizer.param_groups[0],
+                    args.lr,
+                    step / len(train_loader) + epoch,
+                    args,
+                )
 
             epoch_loss += loss.item()
             accum_loss += loss.item()
@@ -153,6 +131,9 @@ def main(args):
                 lr = optimizer.param_groups[0]["lr"]
                 wandb.log({"Lr": lr})
                 wandb.log({"Accum Loss": accum_loss})
+                progress_bar.set_description(
+                    f"Epoch: {epoch}|{args.num_epochs} Loss: {accum_loss:.4f}"
+                )
                 accum_loss = 0.0
 
             progress_bar.update(1)
@@ -163,7 +144,6 @@ def main(args):
         wandb.log({"Train Loss (Epoch Mean)": epoch_loss / len(train_loader)})
 
         val_loss = 0.0
-        eval_output = []
         model.eval()
         with torch.no_grad():
             for step, batch in enumerate(val_loader):
@@ -220,9 +200,9 @@ def main(args):
 
 if __name__ == "__main__":
     torch.cuda.empty_cache()
-    args = parse_args_llama()
+    args: Namespace = parse_args_llama()
 
-    main(args)
+    main(args=args)
     torch.cuda.empty_cache()
     torch.cuda.reset_max_memory_allocated()
     gc.collect()
