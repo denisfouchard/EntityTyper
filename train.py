@@ -63,7 +63,6 @@ def main(args: Namespace) -> None:
 
     accelerate = False
     if accelerate:
-
         device_map = infer_auto_device_map(
             model, no_split_module_classes=["LlamaDecoderLayer"]
         )
@@ -173,7 +172,7 @@ def main(args: Namespace) -> None:
             break
 
         torch.cuda.empty_cache()
-        torch.cuda.reset_max_memory_allocated()
+        gc.collect()
 
     # Step 5. Evaluating
     os.makedirs(f"{args.output_dir}/{args.dataset}", exist_ok=True)
@@ -199,10 +198,7 @@ def main(args: Namespace) -> None:
 
 
 if __name__ == "__main__":
-    torch.cuda.empty_cache()
     args: Namespace = parse_args_llama()
-
     main(args=args)
     torch.cuda.empty_cache()
-    torch.cuda.reset_max_memory_allocated()
     gc.collect()
