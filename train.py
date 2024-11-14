@@ -5,6 +5,12 @@ import wandb
 import gc
 from tqdm import tqdm
 import torch
+from transformers import AutoModelForCausalLM
+from accelerate import infer_auto_device_map, dispatch_model
+
+import time
+
+# Automatically infer and prefer GPU with the most free memory
 from torch.utils.data import DataLoader
 from torch.amp import autocast, GradScaler
 
@@ -88,6 +94,14 @@ def main(args):
     # Step 3: Build Model
     args.llm_model_path = llama_model_path[args.llm_model_name]
     model = GraphLLMClassifier(args=args, n_classes=n_classes)
+
+    accelerate = False
+    if accelerate:
+
+        device_map = infer_auto_device_map(
+            model, no_split_module_classes=["LlamaDecoderLayer"]
+        )
+        model = dispatch_model(model, device_map=device_map)
     print("Loaded model on device", model.device)
 
     # Step 4.a Set loss function
@@ -111,30 +125,21 @@ def main(args):
     progress_bar = tqdm(range(num_training_steps))
     best_val_loss = float("inf")
     best_epoch = 0
-
+    model.train()
     for epoch in range(args.num_epochs):
-
-        model.train()
         epoch_loss, accum_loss = 0.0, 0.0
 
         for step, batch in enumerate(train_loader):
-
-            # Move the batch to the correct device
-            batch = {
-                k: v.to(model.device) if isinstance(v, torch.Tensor) else v
-                for k, v in batch.items()
-            }
 
             # Use autocast for mixed precision
             y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(
                 model.device
             )
-            with autocast(device_type="cuda"):
+
+            with autocast(device_type="cuda", dtype=torch.float16):
                 outputs = model(batch)
                 loss = criterion(outputs, y_true)
-
-            # Backward pass
-            scaler.scale(loss).backward()
+                loss.backward()
 
             # torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]["params"], 0.1)
 
@@ -142,13 +147,9 @@ def main(args):
             accum_loss += loss.item()
 
             if (step + 1) % args.grad_steps == 0:
-                print("Accumulated Loss", accum_loss)
                 # Update model parameters
-                scaler.step(optimizer)
-                scaler.update()
-                # optimizer.step()
+                optimizer.step()
                 optimizer.zero_grad()
-                # Clear accumulated gradients
                 lr = optimizer.param_groups[0]["lr"]
                 wandb.log({"Lr": lr})
                 wandb.log({"Accum Loss": accum_loss})

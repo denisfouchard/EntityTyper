@@ -1,17 +1,15 @@
 import torch
 import torch.nn as nn
 from transformers import (
-    AutoModelForCausalLM,
     LlamaModel,
-    LlamaConfig,
     AutoTokenizer,
 )
-from src.model.gnn import load_gnn_model
 from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_kbit_training,
 )
+from src.model.gnn import GNN_MODEL_MAPPING
 
 BOS = "<s>[INST]"
 EOS_USER = "[/INST]"
@@ -46,9 +44,9 @@ class GraphLLMClassifier(torch.nn.Module):
         kwargs = {
             "device_map": "auto",
             "max_memory": {
-                0: "30GiB",
-                1: "15GiB",
-                2: "15GiB",
+                0: "16GiB",
+                1: "32GiB",
+                2: "16GiB",
             },
             "revision": "main",
         }
@@ -103,7 +101,7 @@ class GraphLLMClassifier(torch.nn.Module):
         self.language_model = language_model
         print("Finish loading LLAMA!")
 
-        self.graph_encoder = load_gnn_model[args.gnn_model_name](
+        self.graph_encoder = GNN_MODEL_MAPPING[args.gnn_model_name](
             in_channels=args.gnn_in_dim,
             out_channels=args.gnn_hidden_dim,
             hidden_channels=args.gnn_hidden_dim,
@@ -119,12 +117,26 @@ class GraphLLMClassifier(torch.nn.Module):
         ).to(self.language_model.device)
 
         self.classifier = CustomClassificationMLP(
-            input_dim=4096 + self.language_model.config.hidden_size,
-            hidden_dim=2048,
+            input_dim=4096,
+            hidden_dim=300,
             num_classes=n_classes,
         ).to(self.language_model.device)
 
         self.word_embedding = self.language_model.get_input_embeddings()
+
+        print(
+            "Projector trainable parameters:",
+            sum(p.numel() for p in self.projector.parameters()),
+        )
+        print(
+            "Classifier trainable parameters:",
+            sum(p.numel() for p in self.classifier.parameters()),
+        )
+
+        print(
+            "Graph Encoder trainable parameters:"
+            + str(sum(p.numel() for p in self.graph_encoder.parameters()))
+        )
 
     @property
     def device(self):
@@ -157,11 +169,15 @@ class GraphLLMClassifier(torch.nn.Module):
 
     def forward(self, samples):
         # encode description, questions and labels
+        samples = {
+            k: v.to(model.device) if isinstance(v, torch.Tensor) else v
+            for k, v in samples.items()
+        }
         questions = self.tokenizer(samples["question"], add_special_tokens=False)
         descriptions = self.tokenizer(samples["desc"], add_special_tokens=False)
 
         # encode special tokens
-        eos_tokens = self.tokenizer(EOS, add_special_tokens=False)
+        # eos_tokens = self.tokenizer(EOS, add_special_tokens=False)
         eos_user_tokens = self.tokenizer(EOS_USER, add_special_tokens=False)
         bos_embeds = self.word_embedding(
             self.tokenizer(
@@ -217,8 +233,8 @@ class GraphLLMClassifier(torch.nn.Module):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             output_hidden_states=True,
-            return_dict=False,
-        )
+            return_dict=True,
+        ).last_hidden_state
 
         output = self.classifier(hidden_states)
 
