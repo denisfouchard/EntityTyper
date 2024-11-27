@@ -5,7 +5,7 @@ import gc
 from tqdm import tqdm
 import pandas as pd
 from torch.utils.data import DataLoader
-from src.utils.seed import seed_everything
+from src.utils.seeding import seed_everything
 from src.config import parse_args_llama
 from src.model import llama_model_path
 from src.model.graph_llm_classifier import GraphLLMClassifier
@@ -25,13 +25,13 @@ def main(args):
     seed = args.seed
     wandb.init(
         project=f"{args.project}",
-        name=f"{args.dataset}_{args.model_name}_seed{seed}",
+        name=f"DBPedia12K - No Retrieval",
         config=args,
     )
 
     seed_everything(seed=seed)
-
-    dataset = DBPediaDataset()
+    retrieval = args.retrieval == "True"
+    dataset = DBPediaDataset(retrieval=retrieval)
     idx_split = dataset.get_idx_split()
 
     # Step 2: Build Node Classification Dataset
@@ -59,7 +59,7 @@ def main(args):
     print(f"Results saving path: {path}")
     model.eval()
     progress_bar_test = tqdm(range(len(test_loader)))
-    acc = 0
+    test_accuracies = []
     true_labels = []
     pred_labels = []
     for _, batch in enumerate(test_loader):
@@ -68,16 +68,14 @@ def main(args):
         y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(model.device)
         with torch.no_grad():
             y_pred = model.predict(batch)
-            batch_acc = (y_pred == y_true).sum().item()
-            acc += batch_acc
+            batch_accuracy = torch.mean((y_pred == y_true).float())
+            test_accuracies.append(batch_accuracy.item())
 
         pred_labels.extend([l for l in [idx2class[i] for i in y_pred]])
 
-        print(f"Batch Acc {batch_acc/len(y_true)}")
-
         progress_bar_test.update(1)
 
-    acc /= len(test_loader.dataset)
+    acc = sum(test_accuracies) / len(test_accuracies)
     print(f"Test Acc {acc}")
     wandb.log({"Test Acc": acc})
 

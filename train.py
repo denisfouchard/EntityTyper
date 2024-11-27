@@ -1,24 +1,23 @@
 """Training script for the GraphLLMClassifier model"""
 
 import os
-import torch
-import wandb
-import gc
 from argparse import Namespace
+import gc
+import torch
 from tqdm import tqdm
 from accelerate import infer_auto_device_map, dispatch_model
-from torch.utils.data import DataLoader
 from torch.amp import autocast
 from src.model import llama_model_path
 from src.model.graph_llm_classifier import GraphLLMClassifier
 from src.dataset.dbpedia import DBPediaDataset
 from src.config import parse_args_llama
-from src.utils.ckpt import _save_checkpoint
+from src.utils.checkpoint import save_checkpoint
 from src.utils.collate import collate_fn
-from src.utils.seed import seed_everything
-from src.utils.lr_schedule import adjust_learning_rate
+from src.utils.seeding import seed_everything
+from src.utils.lr_scheduling import adjust_learning_rate
 from src.dataset.utils.mapping import generate_hierarchical_mapping
 from src.dataset.utils.dataloader import dataset_loader
+import wandb
 
 # Define the number of classes, and do one-hot encoding for the labels
 class2idx, idx2class = generate_hierarchical_mapping(
@@ -138,10 +137,7 @@ def main(args: Namespace) -> None:
             progress_bar.update(1)
 
         if epoch == 1:
-            _save_checkpoint(model, optimizer, epoch, args, is_best=True)
-        print(
-            f"Epoch: {epoch}|{args.num_epochs}: Train Loss (Epoch Mean): {epoch_loss / len(train_loader)}"
-        )
+            save_checkpoint(model, optimizer, epoch, args, is_best=True)
         wandb.log({"Train Loss (Epoch Mean)": epoch_loss / len(train_loader)})
 
         val_loss = 0.0
@@ -164,7 +160,7 @@ def main(args: Namespace) -> None:
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            _save_checkpoint(model, optimizer, epoch, args, is_best=True)
+            save_checkpoint(model, optimizer, epoch, args, is_best=True)
             best_epoch = epoch
 
         print(f"Epoch {epoch} Val Loss {val_loss} Best Val Loss {best_val_loss}")

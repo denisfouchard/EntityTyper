@@ -20,7 +20,7 @@ def _model_path_name(args):
     return f"{args.output_dir}/{args.dataset}/model_name_{args.model_name}_llm_frozen_{args.llm_frozen}_patience_{args.patience}_num_epochs_{args.num_epochs}_seed{args.seed}_checkpoint_best.pth"
 
 
-def _save_checkpoint(model, optimizer, cur_epoch, args, is_best=False):
+def save_checkpoint(model, optimizer, cur_epoch, args, is_best=False):
     """
     Save the checkpoint at the current epoch.
     """

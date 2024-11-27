@@ -20,6 +20,31 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class DBPediaDataset(Dataset):
+    """
+    A dataset class for handling DBPedia data with optional PCST retrieval.
+
+    Attributes:
+        path (str): The base path to the dataset.
+        nodes_dir (str): Directory containing node files.
+        edges_dir (str): Directory containing edge files.
+        graphs_dir (str): Directory containing graph files.
+        retrieval (bool): Flag indicating whether to perform PCST retrieval.
+        version (str): Version of the dataset.
+        cached_graph_dir (str): Directory for cached graphs after retrieval.
+        cached_desc_dir (str): Directory for cached descriptions after retrieval.
+        prompt (str): Default prompt for questions.
+        graph (None): Placeholder for graph data.
+        graph_type (str): Type of graph used, default is "Knowledge Graph".
+        dataset (torch.Tensor): Loaded dataset tensor.
+        q_embs (torch.Tensor): Loaded question embeddings tensor.
+
+    Methods:
+        __post_init__(): Initializes the dataset and performs PCST retrieval if enabled.
+        __len__(): Returns the length of the dataset.
+        __getitem__(index): Retrieves the data sample at the specified index.
+        get_idx_split(): Returns the indices for train, validation, and test splits.
+    """
+
     def __init__(self, version: str = "", retrieval: bool = True):
         super().__init__()
         self.path = f"/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia{version}"
@@ -41,7 +66,30 @@ class DBPediaDataset(Dataset):
         self.q_embs = torch.load(f"{self.path}/q_embs.pt", map_location=device)
 
     def __post_init__(self):
-        # Perform PCST retrieval if retrieval is True
+        """
+        Post-initialization method for the DBPedia dataset class.
+
+        This method performs the Prize-Collecting Steiner Tree (PCST) retrieval if the `retrieval` attribute is set to True.
+        It creates directories for cached graphs and descriptions, and processes each query embedding to retrieve subgraphs
+        and descriptions, which are then cached for future use.
+
+        If the `retrieval` attribute is False, it simply prints a message indicating that the dataset has been initialized
+        without retrieval.
+
+        Attributes:
+            retrieval (bool): Flag indicating whether to perform PCST retrieval.
+            path (str): Base path for the dataset.
+            cached_graph_dir (str): Directory to cache retrieved subgraphs.
+            cached_desc_dir (str): Directory to cache retrieved descriptions.
+            q_embs (list): List of query embeddings.
+            graphs_dir (str): Directory containing graph files.
+            nodes_dir (str): Directory containing node files.
+            edges_dir (str): Directory containing edge files.
+            version (str): Version of the DBPedia dataset.
+
+        Raises:
+            FileNotFoundError: If the graph, node, or edge files are not found.
+        """
         if self.retrieval:
             self.cached_graph_dir = f"{self.path}/cached_graphs"
             self.cached_desc_dir = f"{self.path}/cached_desc"
@@ -65,20 +113,37 @@ class DBPediaDataset(Dataset):
         else:
             print(f"Initialized DBPedia{self.version} dataset with no retrieval.")
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Return the len of the dataset."""
         return len(self.dataset)
 
-    def __getitem__(self, index):
-        data = self.dataset[index]
-        question = f'Question: {data["question"]}\nAnswer: '
+    def __getitem__(self, index) -> dict:
+        """
+        Retrieve an item from the dataset at the specified index.
+
+        Args:
+            index (int): The index of the item to retrieve.
+
+        Returns:
+            dict: A dictionary containing the following keys:
+                - "id" (int): The index of the item.
+                - "question" (str): The formatted question string.
+                - "label" (str): The answer label.
+                - "graph" (torch.Tensor): The graph data loaded from a file.
+                - "desc" (str): The description text loaded from a file (empty if retrieval is False).
+        """
+        item = self.dataset[index]
+        question = f'Question: {item["question"]}\nAnswer: '
         if self.retrieval:
             graph = torch.load(f"{self.cached_graph_dir}/{index}.pt")
-            desc = open(f"{self.cached_desc_dir}/{index}.txt", "r").read()
+            desc = open(
+                f"{self.cached_desc_dir}/{index}.txt",
+                "r",
+            ).read()
         else:
             graph = torch.load(f"{self.graphs_dir}/{index}.pt")
             desc = ""
-        label = data["answer"]
+        label = item["answer"]
 
         return {
             "id": index,
@@ -88,7 +153,21 @@ class DBPediaDataset(Dataset):
             "desc": desc,
         }
 
-    def get_idx_split(self):
+    def get_idx_split(self) -> dict[str, list[int]]:
+        """
+        Reads and returns the indices for train, validation, and test splits from text files.
+
+        The method expects the following files to be present in the `self.path/split/` directory:
+        - train_indices.txt
+        - val_indices.txt
+        - test_indices.txt
+
+        Each file should contain one index per line.
+
+        Returns:
+            dict[str, list[int]]: A dictionary with three keys: 'train', 'val', and 'test'.
+            Each key maps to a list of integers representing the indices for the respective split.
+        """
         # Load the saved indices
         with open(f"{self.path}/split/train_indices.txt", "r") as file:
             train_indices = [int(line.strip()) for line in file]
