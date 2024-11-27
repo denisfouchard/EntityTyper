@@ -43,7 +43,7 @@ def parse_args_llama() -> Namespace:
     parser.add_argument(
         "--checkpoint_path",
         type=str,
-        default="/home/infres/dfouchard-21/G-Retriever/output/dbpedia/model_name_graph_llm_classifier_llm_model_name_3-8b_llm_frozen_False_max_txt_len_512_max_new_tokens_32_gnn_model_name_gt_patience_2_num_epochs_10_seed0_checkpoint_best.pth",
+        default="",
     )
 
     # GNN related

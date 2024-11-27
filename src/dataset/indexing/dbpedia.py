@@ -149,7 +149,7 @@ if __name__ == "__main__":
     model, tokenizer, device = load_model[MODELNAME]()
     text2embedding = load_text2embedding[MODELNAME]
     dataset, sub_g_list = clean_dataset()
-    # save_nodes_edges_from_dataset(dataset=dataset, graphs_list=sub_g_list)
-    # encode_questions(model, tokenizer, device, text2embedding, dataset)
+    save_nodes_edges_from_dataset(dataset=dataset, graphs_list=sub_g_list)
+    encode_questions(model, tokenizer, device, text2embedding, dataset)
     encode_graphs(model, tokenizer, device, text2embedding, dataset)
     split_dataset(dataset=dataset)

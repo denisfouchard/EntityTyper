@@ -57,7 +57,7 @@ class DBPediaDataset(Dataset):
         self.cached_graph_dir = ""
         self.cached_desc_dir = ""
 
-        self.prompt = "Please answer the given question."
+        self.prompt = open(f"{self.path}/prompt", "r").read()
         self.graph = None
         self.graph_type = "Knowledge Graph"
         self.dataset = torch.load(
@@ -133,7 +133,7 @@ class DBPediaDataset(Dataset):
                 - "desc" (str): The description text loaded from a file (empty if retrieval is False).
         """
         item = self.dataset[index]
-        question = f'Question: {item["question"]}\nAnswer: '
+        question = f'## Instructions\n {self.prompt}\n ## Question\n {item["question"]}'
         if self.retrieval:
             graph = torch.load(f"{self.cached_graph_dir}/{index}.pt")
             desc = open(
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", type=str, default="")
-    parser.add_argument("--retrieval", type=bool, default=True)
+    parser.add_argument("--retrieval", type=bool, default=False)
     args = parser.parse_args()
 
     version = args.version

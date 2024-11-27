@@ -38,10 +38,9 @@ def main(args: Namespace) -> None:
     gc.collect()
     torch.cuda.empty_cache()
     # Step 1: Set up wandb
-    seed = args.seed
     wandb.init(
         project=f"{args.project}",
-        name=f"{args.dataset}_{args.model_name}_seed{seed}",
+        name=f"DBPedia12K - No Retrieval - Lightweight data",
         config=args,
     )
 
@@ -174,10 +173,10 @@ def main(args: Namespace) -> None:
 
     # Step 5. Evaluating
     os.makedirs(f"{args.output_dir}/{args.dataset}", exist_ok=True)
-    path = f"{args.output_dir}/{args.dataset}/model_name_{args.model_name}_llm_model_name_{args.llm_model_name}_llm_frozen_{args.llm_frozen}_max_txt_len_{args.max_txt_len}_max_new_tokens_{args.max_new_tokens}_gnn_model_name_{args.gnn_model_name}_patience_{args.patience}_num_epochs_{args.num_epochs}_seed{seed}.csv"
-    print(f"path: {path}")
     model.eval()
-    progress_bar_test = tqdm(range(len(test_loader)))
+    num_testing_steps = len(test_loader)
+    progress_bar_test = tqdm(range(num_testing_steps))
+    progress_bar_test.set_description("Evaluation on test set")
     test_accuracies = []
 
     for step, batch in enumerate(test_loader):
