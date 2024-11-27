@@ -47,8 +47,8 @@ def main(args: Namespace) -> None:
     )
 
     seed_everything(seed=args.seed)
-
-    dataset = DBPediaDataset()
+    retrieval = args.retrieval == "True"
+    dataset = DBPediaDataset(retrieval=retrieval)
     train_loader, val_loader, test_loader = dataset_loader(
         dataset=dataset, args=args, collate_fn=collate_fn
     )
@@ -116,7 +116,7 @@ def main(args: Namespace) -> None:
                 adjust_learning_rate(
                     optimizer.param_groups[0],
                     args.lr,
-                    step / len(train_loader) + epoch,
+                    step / len(train_loader) + epoch + 2,
                     args,
                 )
 
@@ -137,6 +137,8 @@ def main(args: Namespace) -> None:
 
             progress_bar.update(1)
 
+        if epoch == 1:
+            _save_checkpoint(model, optimizer, epoch, args, is_best=True)
         print(
             f"Epoch: {epoch}|{args.num_epochs}: Train Loss (Epoch Mean): {epoch_loss / len(train_loader)}"
         )

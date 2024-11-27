@@ -57,7 +57,7 @@ class GraphLLMClassifier(nn.Module):
         self.tokenizer.pad_token_id = 0
         self.tokenizer.padding_side = "left"
 
-        language_model: LlamaModels = LlamaModel.from_pretrained(
+        language_model: LlamaModel = LlamaModel.from_pretrained(
             args.llm_model_path,
             low_cpu_mem_usage=True,
             load_in_8bit=True,

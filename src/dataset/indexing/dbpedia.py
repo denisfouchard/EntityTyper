@@ -9,9 +9,7 @@ from torch_geometric.data import Data
 from src.utils.lm_modeling import load_model, load_text2embedding
 
 MODELNAME = "sbert"
-CSV_PATH = (
-    "/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/DBPediaQA10K.csv"
-)
+CSV_PATH = "/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/DBPediaQA12K.csv"
 PATH = "dataset/dbpedia"
 path_nodes = f"{PATH}/nodes"
 path_edges = f"{PATH}/edges"
@@ -107,9 +105,7 @@ def split_dataset(dataset: pd.DataFrame, train_p=0.7, val_p=0.15):
         file.write("\n".join(map(str, test_indices)))
 
 
-def encode_questions(
-    model, tokenizer, device, text2embedding, dataset: pd.DataFrame
-):
+def encode_questions(model, tokenizer, device, text2embedding, dataset: pd.DataFrame):
     questions = dataset["question"]
     questions = questions.tolist()
     print("Number of questions: ", len(questions))
@@ -120,9 +116,7 @@ def encode_questions(
     torch.save(q_embs, f"{PATH}/q_embs.pt")
 
 
-def encode_graphs(
-    model, tokenizer, device, text2embedding, dataset: pd.DataFrame
-):
+def encode_graphs(model, tokenizer, device, text2embedding, dataset: pd.DataFrame):
 
     print("Encoding graphs...")
     os.makedirs(path_graphs, exist_ok=True)
@@ -138,9 +132,7 @@ def encode_graphs(
         x = text2embedding(model, tokenizer, device, nodes.node_attr.tolist())
 
         # Encode edges
-        edge_attr = text2embedding(
-            model, tokenizer, device, edges.edge_attr.tolist()
-        )
+        edge_attr = text2embedding(model, tokenizer, device, edges.edge_attr.tolist())
         edge_index = torch.LongTensor([edges.src.tolist(), edges.dst.tolist()])
 
         pyg_graph = Data(
@@ -157,7 +149,7 @@ if __name__ == "__main__":
     model, tokenizer, device = load_model[MODELNAME]()
     text2embedding = load_text2embedding[MODELNAME]
     dataset, sub_g_list = clean_dataset()
-    save_nodes_edges_from_dataset(dataset=dataset, graphs_list=sub_g_list)
-    encode_questions(model, tokenizer, device, text2embedding, dataset)
+    # save_nodes_edges_from_dataset(dataset=dataset, graphs_list=sub_g_list)
+    # encode_questions(model, tokenizer, device, text2embedding, dataset)
     encode_graphs(model, tokenizer, device, text2embedding, dataset)
     split_dataset(dataset=dataset)
