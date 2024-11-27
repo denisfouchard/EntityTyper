@@ -3,17 +3,25 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, TransformerConv, GATConv
 
 
-class GCN(torch.nn.Module):
+class GraphEncoder(torch.nn.Module):
+    def reset_parameters(self):
+        raise NotImplementedError
+
+    def forward(self, x, edge_index, edge_attr):
+        raise NotImplementedError
+
+
+class GCNEncoder(GraphEncoder):
     def __init__(
         self,
-        in_channels,
-        hidden_channels,
-        out_channels,
-        num_layers,
-        dropout,
-        num_heads=-1,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        num_layers: int,
+        dropout: float,
+        num_heads: int = -1,
     ):
-        super(GCN, self).__init__()
+        super(GCNEncoder, self).__init__()
         self.convs = torch.nn.ModuleList()
         self.convs.append(GCNConv(in_channels, hidden_channels))
         self.bns = torch.nn.ModuleList()
@@ -40,17 +48,17 @@ class GCN(torch.nn.Module):
         return x, edge_attr
 
 
-class GraphTransformer(torch.nn.Module):
+class GraphTransformerEncoder(GraphEncoder):
     def __init__(
         self,
-        in_channels,
-        hidden_channels,
-        out_channels,
-        num_layers,
-        dropout,
-        num_heads=-1,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        num_layers: int,
+        dropout: float,
+        num_heads: int = -1,
     ):
-        super(GraphTransformer, self).__init__()
+        super(GraphTransformerEncoder, self).__init__()
         self.convs = torch.nn.ModuleList()
         self.convs.append(
             TransformerConv(
@@ -101,17 +109,17 @@ class GraphTransformer(torch.nn.Module):
         return x, edge_attr
 
 
-class GAT(torch.nn.Module):
+class GATEncoder(GraphEncoder):
     def __init__(
         self,
-        in_channels,
-        hidden_channels,
-        out_channels,
-        num_layers,
-        dropout,
-        num_heads=4,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        num_layers: int,
+        dropout: float,
+        num_heads: int = 4,
     ):
-        super(GAT, self).__init__()
+        super(GATEncoder, self).__init__()
         self.convs = torch.nn.ModuleList()
         self.convs.append(
             GATConv(in_channels, hidden_channels, heads=num_heads, concat=False)
@@ -144,8 +152,8 @@ class GAT(torch.nn.Module):
         return x, edge_attr
 
 
-GNN_MODEL_MAPPING = {
-    "gcn": GCN,
-    "gat": GAT,
-    "gt": GraphTransformer,
+GNN_MODEL_MAPPING: dict[str, GraphEncoder] = {
+    "gcn": GCNEncoder,
+    "gat": GATEncoder,
+    "gt": GraphTransformerEncoder,
 }
