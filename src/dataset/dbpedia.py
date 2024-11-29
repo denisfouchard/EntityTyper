@@ -9,6 +9,7 @@ from tqdm import tqdm
 # Add the path to the sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from src.dataset.utils.retrieval import PCST_retrieve
+from src.dataset.utils.mapping import generate_mapping, generate_hierarchical_mapping
 
 # Remove warnings
 import warnings
@@ -45,7 +46,7 @@ class DBPediaDataset(Dataset):
         get_idx_split(): Returns the indices for train, validation, and test splits.
     """
 
-    def __init__(self, version: str = "", retrieval: bool = True):
+    def __init__(self, version: str = "", retrieval: bool = True, summary: bool = True):
         super().__init__()
         self.path = f"/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia{version}"
         self.nodes_dir = f"{self.path}/nodes"
@@ -56,7 +57,10 @@ class DBPediaDataset(Dataset):
 
         self.cached_graph_dir = ""
         self.cached_desc_dir = ""
-
+        self.class2idx, self.idx2class = generate_hierarchical_mapping(
+            f"{self.path}/hierarchy_ids.txt"
+        )
+        self.classes = list(self.class2idx.keys())
         self.prompt = open(f"{self.path}/prompt", "r").read()
         self.graph = None
         self.graph_type = "Knowledge Graph"
@@ -64,6 +68,9 @@ class DBPediaDataset(Dataset):
             f"{self.path}/sampled_dataset.pt", map_location=device
         )
         self.q_embs = torch.load(f"{self.path}/q_embs.pt", map_location=device)
+
+        if summary:
+            self.summary()
 
     def __post_init__(self):
         """
@@ -117,6 +124,28 @@ class DBPediaDataset(Dataset):
         """Return the len of the dataset."""
         return len(self.dataset)
 
+    def summary(self):
+        """
+        Print a summary of the dataset.
+        """
+        rep_classes = 0
+        print(f"==========[DBPedia{self.version} Dataset Summary]==========")
+        print(f"Number of samples: {len(self.dataset)}")
+        print(f"Number of classes: {len(self.classes)}")
+        print(f"Number of query embeddings: {len(self.q_embs)}")
+        print(f"Graph type: {self.graph_type}")
+        print("Number of samples per class:")
+        n_sample_per_class = {c: 0 for c in self.classes}
+        for item in self.dataset:
+            n_sample_per_class[item["answer"]] += 1
+        for c, n in n_sample_per_class.items():
+            if n > 0:
+                rep_classes += 1
+            print(f"  - {c}: {n}")
+        print(
+            f"Number of classes represented: {rep_classes} ({100*rep_classes/len(self.classes)}%)"
+        )
+
     def __getitem__(self, index) -> dict:
         """
         Retrieve an item from the dataset at the specified index.
@@ -133,6 +162,7 @@ class DBPediaDataset(Dataset):
                 - "desc" (str): The description text loaded from a file (empty if retrieval is False).
         """
         item = self.dataset[index]
+        entity = item["q_entity"]
         question = f'## Instructions\n {self.prompt}\n ## Question\n {item["question"]}'
         if self.retrieval:
             graph = torch.load(f"{self.cached_graph_dir}/{index}.pt")
@@ -148,6 +178,7 @@ class DBPediaDataset(Dataset):
         return {
             "id": index,
             "question": question,
+            "entity": entity,
             "label": label,
             "graph": graph,
             "desc": desc,

@@ -23,7 +23,7 @@ def parse_args_llama() -> Namespace:
 
     # Learning Rate Scheduler
     parser.add_argument("--num_epochs", type=int, default=10)
-    parser.add_argument("--warmup_epochs", type=float, default=1)
+    parser.add_argument("--warmup_epochs", type=float, default=3)
 
     # Inference
     parser.add_argument("--eval_batch_size", type=int, default=3)

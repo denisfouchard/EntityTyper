@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from src.model.graph_encoder import GNN_MODEL_MAPPING, GraphEncoder
+from src.utils.lm_modeling import load_sbert_to_device, sber_text2embedding
 
 IGNORE_INDEX = -100
 
@@ -11,23 +12,27 @@ class CustomClassificationMLP(nn.Module):
         self.mlp: nn.Module = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, num_classes),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, num_classes),
         )
 
-    def forward(self, hidden_states) -> torch.Tensor:
+    def forward(self, samples) -> torch.Tensor:
         # Take the last hidden state
-        last_hidden_state = hidden_states[:, -1, :]
-        return self.mlp(last_hidden_state)
+        return self.mlp(samples)
 
 
 class GNNClassifier(nn.Module):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.max_txt_len = args.max_txt_len
         self.max_new_tokens = args.max_new_tokens
         self.n_classes = n_classes
+
+        # Load SBERT
+        self._sbert_model, self._sbert_tokenizer = load_sbert_to_device(device)
 
         self.graph_encoder: GraphEncoder = GNN_MODEL_MAPPING[args.gnn_model_name](
             in_channels=args.gnn_in_dim,
@@ -36,19 +41,35 @@ class GNNClassifier(nn.Module):
             num_layers=args.gnn_num_layers,
             dropout=args.gnn_dropout,
             num_heads=args.gnn_num_heads,
-        ).to(self.device)
+        ).to(device)
 
         self.classifier: CustomClassificationMLP = CustomClassificationMLP(
-            input_dim=args.gnn_hidden_dim,
+            input_dim=args.gnn_hidden_dim + 1024,  # 1024 is the SBERT embedding size
             hidden_dim=1024,
             num_classes=n_classes,
-        ).to(self.device)
+        ).to(device)
 
     @property
     def device(self):
         return list(self.parameters())[0].device
 
-    def encode_graphs(self, samples):
+    def encode_entities(self, samples: str) -> torch.Tensor:
+        with torch.no_grad():
+            entities_embeddings = []
+            entities = samples["entity"]
+            for entity in entities:
+                entity_encoding = self._sbert_tokenizer(
+                    text=entity, padding=True, truncation=True, return_tensors="pt"
+                ).to(self.device)
+                entity_embedding = self._sbert_model.forward(
+                    input_ids=entity_encoding.input_ids,
+                    att_mask=entity_encoding.attention_mask,
+                ).to(self.device)
+                entities_embeddings.append(entity_embedding)
+            entities_embeddings = torch.stack(entities_embeddings)
+            return entities_embeddings
+
+    def encode_graphs(self, samples) -> torch.Tensor:
         graphs = samples["graph"]
         graphs = graphs.to(self.device)
         n_embeds: torch.Tensor = self.graph_encoder(
@@ -76,6 +97,13 @@ class GNNClassifier(nn.Module):
     def forward(self, samples) -> torch.Tensor:
         # encode graphs
         graph_embeds = self.encode_graphs(samples)
+        # graph_embeds = graph_embeds.unsqueeze(0)
+        entity_embeds = self.encode_entities(samples)
+        entity_embeds = entity_embeds.squeeze(1)
+
+        # Concatenate the embeddings
+        graph_embeds = torch.cat((graph_embeds, entity_embeds), dim=1)
+
         # Classification
         output = self.classifier.forward(graph_embeds)
 

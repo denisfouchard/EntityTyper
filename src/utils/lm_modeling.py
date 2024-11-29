@@ -44,21 +44,19 @@ class Sentence_Transformer(nn.Module):
         print(f"inherit model weights from {pretrained_repo}")
         self.bert_model = AutoModel.from_pretrained(pretrained_repo)
 
-    def mean_pooling(self, model_output, attention_mask):
+    def mean_pooling(self, model_output, attention_mask) -> torch.Tensor:
         token_embeddings = model_output[
             0
         ]  # First element of model_output contains all token embeddings
         data_type = token_embeddings.dtype
         input_mask_expanded = (
-            attention_mask.unsqueeze(-1)
-            .expand(token_embeddings.size())
-            .to(data_type)
+            attention_mask.unsqueeze(-1).expand(token_embeddings.size()).to(data_type)
         )
-        return torch.sum(
-            token_embeddings * input_mask_expanded, 1
-        ) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+            input_mask_expanded.sum(1), min=1e-9
+        )
 
-    def forward(self, input_ids, att_mask):
+    def forward(self, input_ids, att_mask) -> torch.Tensor:
         bert_out = self.bert_model(input_ids=input_ids, attention_mask=att_mask)
         sentence_embeddings = self.mean_pooling(bert_out, att_mask)
 
@@ -67,12 +65,8 @@ class Sentence_Transformer(nn.Module):
 
 
 def load_word2vec():
-    print(
-        f"Loading Google's pre-trained Word2Vec model from {word2vec_path}..."
-    )
-    model = gensim.models.KeyedVectors.load_word2vec_format(
-        word2vec_path, binary=True
-    )
+    print(f"Loading Google's pre-trained Word2Vec model from {word2vec_path}...")
+    model = gensim.models.KeyedVectors.load_word2vec_format(word2vec_path, binary=True)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     return model, None, device
 
@@ -117,11 +111,19 @@ def load_sbert():
     return model, tokenizer, device
 
 
+def load_sbert_to_device(device):
+
+    model = Sentence_Transformer(pretrained_repo)
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_repo)
+    model.to(device)
+
+    model.eval()
+    return model, tokenizer
+
+
 def sber_text2embedding(model, tokenizer, device, text):
     try:
-        encoding = tokenizer(
-            text, padding=True, truncation=True, return_tensors="pt"
-        )
+        encoding = tokenizer(text, padding=True, truncation=True, return_tensors="pt")
         dataset = Dataset(
             input_ids=encoding.input_ids, attention_mask=encoding.attention_mask
         )
@@ -173,18 +175,12 @@ def load_contriever():
 def contriever_text2embedding(model, tokenizer, device, text):
 
     def mean_pooling(token_embeddings, mask):
-        token_embeddings = token_embeddings.masked_fill(
-            ~mask[..., None].bool(), 0.0
-        )
-        sentence_embeddings = (
-            token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
-        )
+        token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.0)
+        sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
         return sentence_embeddings
 
     try:
-        inputs = tokenizer(
-            text, padding=True, truncation=True, return_tensors="pt"
-        )
+        inputs = tokenizer(text, padding=True, truncation=True, return_tensors="pt")
         dataset = Dataset(
             input_ids=inputs.input_ids, attention_mask=inputs.attention_mask
         )
