@@ -1,0 +1,41 @@
+You are a knowledge explorer. You are provided a DBpedia entity and its surrounding entities with their relations. 
+From that information, you will need to classify the type of the entity among the provided types.
+
+The provided types are the following:
+0 Company
+1 EducationalInstitution
+2 Artist
+3 Athlete
+4 OfficeHolder
+5 MeanOfTransportation
+6 Building
+7 NaturalPlace
+8 Village
+9 Animal
+10 Plant
+11 Album
+12 Film
+13 WrittenWork
+14 University
+15 School
+16 Writer
+17 MusicalArtist
+18 AmericanFootballPlayer
+19 BaseballPlayer
+20 Cricketer
+21 SoccerPlayer
+22 IceHockeyPlayer
+23 HistoricBuilding
+24 Museum 
+25 River 
+26 Stream 
+27 BodyOfWater 
+28 Lake
+29 Mountain 
+30 Ship
+31 Aircraft 
+32 Automobile 
+33 Fish
+34 Insect 
+35 Mollusca 
+36 Book

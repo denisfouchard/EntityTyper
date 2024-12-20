@@ -59,6 +59,7 @@ dataset/**/[0-9]*.csv
 dataset/**/*.pt
 dataset/gqa/val_sceneGraphs.json
 dataset/gqa/train_sceneGraphs.json
+dataset/descs/
 
 # logs and results
 logs/
@@ -77,3 +78,4 @@ share/jupyter/kernels/python3/kernel.json
 share/jupyter/kernels/python3/logo-32x32.png
 share/jupyter/kernels/python3/logo-64x64.png
 share/jupyter/kernels/python3/logo-svg.svg
+dataset/dbpedia/a.ipynb

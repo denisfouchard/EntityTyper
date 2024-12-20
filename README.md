@@ -1,104 +1,45 @@
-# G-Retriever
+# GNNxLLM for Entity Typing
+Author: [Denis Fouchard](mailto:denis.fouchard@telecom-paris.fr), LTCI Télécom Paris.
 
-[![arXiv](https://img.shields.io/badge/arXiv-2402.07630-b31b1b.svg)](https://arxiv.org/abs/2402.07630)
+This repository is a heavily modified fork of the great work done by [Xiaoxin He et al](https://arxiv.org/abs/2402.07630). The original repository can be found [here](https://github.com/XiaoxinHe/G-Retriever?tab=readme-ov-file).
 
-This repository contains the source code for the paper ["<u>G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering</u>"](https://arxiv.org/abs/2402.07630).
+## Dependencies
+Requires Python 3.11 or later.
 
-We introduce **G-Retriever**, a flexible question-answering framework targeting real-world textual graphs, applicable to multiple applications including scene graph understanding, common sense reasoning, and knowledge graph reasoning.
-<img src="figs/chat.svg">
-
-**G-Retriever** integrates the strengths of Graph Neural Networks (GNNs), Large Language Models (LLMs), and Retrieval-Augmented Generation (RAG), and can be fine-tuned to enhance graph understanding via soft prompting.
-<img src="figs/overview.svg">
-
-## News
-[2024.09] [PyG 2.6](https://github.com/pyg-team/pytorch_geometric/releases/tag/2.6.0) now supports **G-Retriever**! 🎉 \[[Dataset](https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/datasets/web_qsp_dataset.html)\]\[[Model](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.nn.models.GRetriever.html?highlight=gretriever)\]
-
-## Citation
 ```
-@article{he2024g,
-  title={G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering},
-  author={He, Xiaoxin and Tian, Yijun and Sun, Yifei and Chawla, Nitesh V and Laurent, Thomas and LeCun, Yann and Bresson, Xavier and Hooi, Bryan},
-  journal={arXiv preprint arXiv:2402.07630},
-  year={2024}
-}
+python -m venv venv
+pip install -r requirements
 ```
-
-## Environment setup
+## Data Preparation
 ```
-conda create --name g_retriever python=3.9 -y
-conda activate g_retriever
-
-# https://pytorch.org/get-started/locally/
-conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia
-
-python -c "import torch; print(torch.__version__)"
-python -c "import torch; print(torch.version.cuda)"
-pip install pyg_lib
-torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.1+cu118.html
-
-pip install peft
-pip install pandas
-pip install ogb
-pip install transformers
-pip install wandb
-pip install sentencepiece
-pip install torch_geometric
-pip install datasets
-pip install pcst_fast
-pip install gensim
-pip install scipy=1.12
-```
-
-## Data Preprocessing
-```
-# expla_graphs
-python -m src.dataset.preprocess.expla_graphs
-python -m src.dataset.expla_graphs
-
-# scene_graphs, might take
-python -m src.dataset.preprocess.scene_graphs
-python -m src.dataset.scene_graphs
-
-# webqsp
-python -m src.dataset.preprocess.webqsp
-python -m src.dataset.webqsp
+python -m src.dataset.indexing.dbpedia
+python -m src.dataset.dbpedia
 ```
 
 ## Training
 Replace path to the llm checkpoints in the `src/model/__init__.py`, then run
 
-### 1) Inference-Only LLM
-```
-python inference.py --dataset scene_graphs --model_name inference_llm --llm_model_name 7b_chat
-python inference.py --dataset webqsp --model_name inference_llm --llm_model_name 7b_chat
-```
-### 2) Frozen LLM + Prompt Tuning
-```
-# prompt tuning
-python train.py --dataset scene_graphs_baseline --model_name pt_llm
 
-# G-Retriever
-python train.py --dataset scene_graphs --model_name graph_llm
+### 1) GraphLLM - Frozen LLM
+```
+python train.py --dataset dbpedia --model_name graph_llm --frozen_llm True ...
 ```
 
-### 3) Tuned LLM
+### 2) GraphLLM - Tuned LLM
 ```
-# finetune LLM with LoRA
-python train.py --dataset scene_graphs_baseline --model_name llm --llm_frozen False
-
-# G-Retriever with LoRA
-python train.py --dataset scene_graphs --model_name graph_llm --llm_frozen False
-python train.py --dataset webqsp --model_name graph_llm --llm_frozen False
+python train.py --dataset dbpedia --model_name graph_llm_classifier --llm_frozen False ...
+```
+### 3) GNN Classifier
+```
+python train_gnn.py --dataset dbpedia ...
 ```
 
+For more options during training, see `config.py`.
 
-## Reproducibility
-Use `run.sh` to run the codes and reproduce the published results in the main table.
+## Available Models
+See `src/model/__init__.py` for available models.
+- GraphLLM : LLM with GNN encoder, no classification head
+- GraphLLMClassifier : LLM with GNN encoder, classification head
+- GNNClassifier : Bert-like model with GNN encoder
+- LLMClassifier : LLM with classification head only
 
-
-
-## Testing Finetuned model
-
-```
-python inference.py --dataset dbpedia --model_name graph_llm --llm_model_name 3-8b
-```

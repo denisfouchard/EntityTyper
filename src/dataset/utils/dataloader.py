@@ -7,6 +7,9 @@ def dataset_loader(
     args,
     collate_fn: Callable,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
+    """
+    A simple data loader for PyTorch datasets.
+    """
     idx_split = dataset.get_idx_split()
     train_dataset = [dataset[i] for i in idx_split["train"]]
     val_dataset = [dataset[i] for i in idx_split["val"]]

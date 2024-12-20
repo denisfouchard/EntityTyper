@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast as autocast
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from src.model.gnn import load_gnn_model
+from src.model.graph_encoder import GNN_MODEL_MAPPING
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -77,7 +77,7 @@ class GraphLLM(torch.nn.Module):
         self.model = model
         print("Finish loading LLAMA!")
 
-        self.graph_encoder = load_gnn_model[args.gnn_model_name](
+        self.graph_encoder = GNN_MODEL_MAPPING[args.gnn_model_name](
             in_channels=args.gnn_in_dim,
             out_channels=args.gnn_hidden_dim,
             hidden_channels=args.gnn_hidden_dim,
@@ -117,9 +117,7 @@ class GraphLLM(torch.nn.Module):
 
         # mean pooling using vanilla PyTorch
         batch_size = graphs.batch.max().item() + 1
-        g_embeds_sum = torch.zeros(
-            batch_size, n_embeds.size(1), device=n_embeds.device
-        )
+        g_embeds_sum = torch.zeros(batch_size, n_embeds.size(1), device=n_embeds.device)
         g_embeds_count = torch.zeros(batch_size, device=n_embeds.device)
 
         g_embeds_sum.scatter_add_(
@@ -128,9 +126,7 @@ class GraphLLM(torch.nn.Module):
         g_embeds_count.scatter_add_(
             0,
             graphs.batch,
-            torch.ones_like(
-                graphs.batch, device=n_embeds.device, dtype=torch.float
-            ),
+            torch.ones_like(graphs.batch, device=n_embeds.device, dtype=torch.float),
         )
 
         g_embeds = g_embeds_sum / g_embeds_count.unsqueeze(-1)
@@ -140,9 +136,7 @@ class GraphLLM(torch.nn.Module):
     def forward(self, samples):
 
         # encode description, questions and labels
-        questions = self.tokenizer(
-            samples["question"], add_special_tokens=False
-        )
+        questions = self.tokenizer(samples["question"], add_special_tokens=False)
         descriptions = self.tokenizer(samples["desc"], add_special_tokens=False)
         labels = self.tokenizer(samples["label"], add_special_tokens=False)
 
@@ -169,8 +163,7 @@ class GraphLLM(torch.nn.Module):
         for i in range(batch_size):
             # Add bos & eos token
             label_input_ids = (
-                labels.input_ids[i][: self.max_new_tokens]
-                + eos_tokens.input_ids
+                labels.input_ids[i][: self.max_new_tokens] + eos_tokens.input_ids
             )
             input_ids = (
                 descriptions.input_ids[i][: self.max_txt_len]
@@ -204,15 +197,9 @@ class GraphLLM(torch.nn.Module):
                 IGNORE_INDEX
             ] * pad_length + batch_label_input_ids[i]
 
-        inputs_embeds = torch.stack(batch_inputs_embeds, dim=0).to(
-            self.model.device
-        )
-        attention_mask = torch.tensor(batch_attention_mask).to(
-            self.model.device
-        )
-        label_input_ids = torch.tensor(batch_label_input_ids).to(
-            self.model.device
-        )
+        inputs_embeds = torch.stack(batch_inputs_embeds, dim=0).to(self.model.device)
+        attention_mask = torch.tensor(batch_attention_mask).to(self.model.device)
+        label_input_ids = torch.tensor(batch_label_input_ids).to(self.model.device)
 
         with self.maybe_autocast():
             outputs = self.model(
@@ -227,9 +214,7 @@ class GraphLLM(torch.nn.Module):
     def inference(self, samples):
 
         # encode description and questions
-        questions = self.tokenizer(
-            samples["question"], add_special_tokens=False
-        )
+        questions = self.tokenizer(samples["question"], add_special_tokens=False)
         descriptions = self.tokenizer(samples["desc"], add_special_tokens=False)
 
         # encode special tokens
@@ -275,12 +260,8 @@ class GraphLLM(torch.nn.Module):
             )
             batch_attention_mask[i] = [0] * pad_length + batch_attention_mask[i]
 
-        inputs_embeds = torch.stack(batch_inputs_embeds, dim=0).to(
-            self.model.device
-        )
-        attention_mask = torch.tensor(batch_attention_mask).to(
-            self.model.device
-        )
+        inputs_embeds = torch.stack(batch_inputs_embeds, dim=0).to(self.model.device)
+        attention_mask = torch.tensor(batch_attention_mask).to(self.model.device)
 
         with self.maybe_autocast():
             outputs = self.model.generate(

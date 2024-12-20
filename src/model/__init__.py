@@ -1,5 +1,16 @@
+from .gnn_classifier import GNNClassifier
+from .llm_classifier import LLMClassifier
+from .graph_llm_classifier import GraphLLMClassifier
+from .base_classifier import BaseClassifier
+
 # Replace the following with the model paths
 llama_model_path = {
-    "3-8b": "meta-llama/Meta-Llama-3-8B",
-    "trained_dbpedia": "/home/infres/dfouchard-21/G-Retriever/output/dbpedia/model_name_graph_llm_llm_model_name_3-8b_llm_frozen_False_max_txt_len_512_max_new_tokens_32_gnn_model_name_gt_patience_2_num_epochs_10_seed0_checkpoint_best.pth",
+    "llama": "meta-llama/Meta-Llama-3-8B",
+}
+
+
+CLASSIFIER_MODEL_MAPPING: dict[str, BaseClassifier] = {
+    "gnn": GNNClassifier,
+    "llm": LLMClassifier,
+    "graph_llm": GraphLLMClassifier,
 }
