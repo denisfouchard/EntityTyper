@@ -7,10 +7,11 @@ import torch
 from datasets import Dataset
 from torch_geometric.data import Data
 from src.utils.lm_modeling import load_model, load_text2embedding
+from joblib import Parallel, delayed
 
 MODELNAME = "sbert"
-CSV_PATH = "/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/DBPediaQA12K.csv"
-PATH = "dataset/dbpedia"
+CSV_PATH = "/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia60k/DBPediaQA60K.csv"
+PATH = "dataset/dbpedia60k"
 path_nodes = f"{PATH}/nodes"
 path_edges = f"{PATH}/edges"
 path_graphs = f"{PATH}/graphs"
@@ -116,40 +117,62 @@ def encode_questions(model, tokenizer, device, text2embedding, dataset: pd.DataF
     torch.save(q_embs, f"{PATH}/q_embs.pt")
 
 
-def encode_graphs(model, tokenizer, device, text2embedding, dataset: pd.DataFrame):
+def _encode_graph(index, text2embedding, model, tokenizer, device):
+    # Check if the graph is already encoded
+    if os.path.exists(f"{path_graphs}/{index}.pt"):
+        return 0
+    nodes = pd.read_csv(f"{path_nodes}/{index}.csv")
+    edges = pd.read_csv(f"{path_edges}/{index}.csv")
+
+    nodes.node_attr.fillna("", inplace=True)
+    x = text2embedding(model, tokenizer, device, nodes.node_attr.tolist())
+
+    # Encode edges
+    edge_attr = text2embedding(model, tokenizer, device, edges.edge_attr.tolist())
+    edge_index = torch.LongTensor([edges.src.tolist(), edges.dst.tolist()])
+
+    pyg_graph = Data(
+        x=x,
+        edge_index=edge_index,
+        edge_attr=edge_attr,
+        num_nodes=len(nodes),
+    )
+    if pyg_graph is not None:
+        torch.save(pyg_graph, f"{path_graphs}/{index}.pt")
+
+    return 1
+
+
+def encode_graphs(
+    model, tokenizer, device, text2embedding, dataset: pd.DataFrame | Dataset, n_jobs=1
+):
 
     print("Encoding graphs...")
     os.makedirs(path_graphs, exist_ok=True)
 
-    for index in tqdm(range(len(dataset))):
-        # Check if the graph is already encoded
-        if os.path.exists(f"{path_graphs}/{index}.pt"):
-            continue
-        nodes = pd.read_csv(f"{path_nodes}/{index}.csv")
-        edges = pd.read_csv(f"{path_edges}/{index}.csv")
-
-        nodes.node_attr.fillna("", inplace=True)
-        x = text2embedding(model, tokenizer, device, nodes.node_attr.tolist())
-
-        # Encode edges
-        edge_attr = text2embedding(model, tokenizer, device, edges.edge_attr.tolist())
-        edge_index = torch.LongTensor([edges.src.tolist(), edges.dst.tolist()])
-
-        pyg_graph = Data(
-            x=x,
-            edge_index=edge_index,
-            edge_attr=edge_attr,
-            num_nodes=len(nodes),
+    index = tqdm(range(len(dataset)))
+    if n_jobs == 1:
+        for i in index:
+            _encode_graph(i, text2embedding, model, tokenizer, device)
+    else:
+        Parallel(n_jobs=n_jobs)(
+            delayed(_encode_graph)(i, text2embedding, model, tokenizer, device)
+            for i in index
         )
-        if pyg_graph is not None:
-            torch.save(pyg_graph, f"{path_graphs}/{index}.pt")
 
 
 if __name__ == "__main__":
+    retrieval = False
     model, tokenizer, device = load_model[MODELNAME]()
     text2embedding = load_text2embedding[MODELNAME]
-    dataset, sub_g_list = clean_dataset()
-    save_nodes_edges_from_dataset(dataset=dataset, graphs_list=sub_g_list)
-    encode_questions(model, tokenizer, device, text2embedding, dataset)
-    encode_graphs(model, tokenizer, device, text2embedding, dataset)
+    if not os.path.exists(f"{PATH}/sampled_dataset.pt"):
+        dataset, sub_g_list = clean_dataset()
+        save_nodes_edges_from_dataset(dataset=dataset, graphs_list=sub_g_list)
+    else:
+        print("Loading cleaned dataset from disk...")
+        dataset = torch.load(f"{PATH}/sampled_dataset.pt")
+        print(f"Loaded dataset with {len(dataset)} samples")
+    if retrieval:
+        encode_questions(model, tokenizer, device, text2embedding, dataset)
+    encode_graphs(model, tokenizer, device, text2embedding, dataset, n_jobs=1)
     split_dataset(dataset=dataset)

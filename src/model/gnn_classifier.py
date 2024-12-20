@@ -1,7 +1,19 @@
 import torch
 import torch.nn as nn
+from src.model.base_classifier import BaseClassifier
 from src.model.graph_encoder import GNN_MODEL_MAPPING, GraphEncoder
-from src.utils.lm_modeling import load_sbert_to_device, sber_text2embedding
+from src.utils.lm_modeling import load_sbert_to_device
+from contextlib import contextmanager
+
+
+@contextmanager
+def conditional_no_grad(frozen: bool):
+    if frozen:
+        with torch.no_grad():
+            yield
+    else:
+        yield
+
 
 IGNORE_INDEX = -100
 
@@ -22,7 +34,7 @@ class CustomClassificationMLP(nn.Module):
         return self.mlp(samples)
 
 
-class GNNClassifier(nn.Module):
+class GNNClassifier(BaseClassifier):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()
@@ -30,6 +42,8 @@ class GNNClassifier(nn.Module):
         self.max_txt_len = args.max_txt_len
         self.max_new_tokens = args.max_new_tokens
         self.n_classes = n_classes
+        self.entity_description = args.entity_description
+        self.freezing_bert = args.llm_frozen
 
         # Load SBERT
         self._sbert_model, self._sbert_tokenizer = load_sbert_to_device(device)
@@ -54,9 +68,13 @@ class GNNClassifier(nn.Module):
         return list(self.parameters())[0].device
 
     def encode_entities(self, samples: str) -> torch.Tensor:
-        with torch.no_grad():
-            entities_embeddings = []
+
+        entities_embeddings = []
+        if self.entity_description and len(samples["desc"]) > 0:
+            entities = samples["desc"]
+        else:
             entities = samples["entity"]
+        with conditional_no_grad(self.freezing_bert):
             for entity in entities:
                 entity_encoding = self._sbert_tokenizer(
                     text=entity, padding=True, truncation=True, return_tensors="pt"
@@ -66,8 +84,8 @@ class GNNClassifier(nn.Module):
                     att_mask=entity_encoding.attention_mask,
                 ).to(self.device)
                 entities_embeddings.append(entity_embedding)
-            entities_embeddings = torch.stack(entities_embeddings)
-            return entities_embeddings
+        entities_embeddings = torch.stack(entities_embeddings)
+        return entities_embeddings
 
     def encode_graphs(self, samples) -> torch.Tensor:
         graphs = samples["graph"]

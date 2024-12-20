@@ -5,7 +5,6 @@ from argparse import Namespace
 import gc
 import torch
 from tqdm import tqdm
-from accelerate import infer_auto_device_map, dispatch_model
 from torch.amp import autocast
 from src.model import llama_model_path
 from src.model.gnn_classifier import GNNClassifier
@@ -21,7 +20,7 @@ import wandb
 
 # Define the number of classes, and do one-hot encoding for the labels
 class2idx, idx2class = generate_hierarchical_mapping(
-    file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia/hierarchy_ids.txt"
+    file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia60k/hierarchy_ids.txt"
 )
 n_classes = len(idx2class)
 
@@ -40,13 +39,16 @@ def main(args: Namespace) -> None:
     # Step 1: Set up wandb
     wandb.init(
         project=f"{args.project}",
-        name=f"DBPedia12K - No Retrieval - SBert+BigMLP",
+        name=f"DBPedia60K - EntityDescription - SBert+BigMLP",
         config=args,
     )
 
     seed_everything(seed=args.seed)
     retrieval = args.retrieval == "True"
-    dataset = DBPediaDataset(retrieval=retrieval)
+    entity_description = args.entity_description
+    dataset = DBPediaDataset(
+        retrieval=retrieval, version="60k", entity_desc=entity_description
+    )
     args.model_name = "gnn_classifier"
     args.llm_model_name = "bert"
     args.batch_size = 32
@@ -55,7 +57,9 @@ def main(args: Namespace) -> None:
         dataset=dataset, args=args, collate_fn=collate_fn
     )
     # Step 3: Build Model
-    model = GNNClassifier(args=args, n_classes=n_classes)
+    model = GNNClassifier(
+        args=args, n_classes=n_classes, entity_description=entity_description
+    )
     print("Loaded BERT! (frozen)")
     print("Loaded model on device", model.device)
 

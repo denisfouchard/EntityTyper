@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from src.model.base_classifier import BaseClassifier
 from transformers import (
     LlamaModel,
     AutoTokenizer,
@@ -18,12 +19,14 @@ EOS = "</s>"
 IGNORE_INDEX = -100
 
 
-class CustomClassificationMLP(nn.Module):
+class ClassificationHead(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes):
         super().__init__()
         self.mlp: nn.Module = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
+            nn.Dropout(0.1),
             nn.Linear(hidden_dim, num_classes),
         )
 
@@ -33,7 +36,7 @@ class CustomClassificationMLP(nn.Module):
         return self.mlp(last_hidden_state)
 
 
-class GraphLLMClassifier(nn.Module):
+class GraphLLMClassifier(BaseClassifier):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()
@@ -111,7 +114,7 @@ class GraphLLMClassifier(nn.Module):
             nn.Linear(2048, 4096),
         ).to(self.language_model.device)
 
-        self.classifier: CustomClassificationMLP = CustomClassificationMLP(
+        self.classifier: ClassificationHead = ClassificationHead(
             input_dim=4096,
             hidden_dim=1024,
             num_classes=n_classes,

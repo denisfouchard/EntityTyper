@@ -1,5 +1,15 @@
-# G-Retriever
+# GNNxLLM for Entity Typing
+Author: [Denis Fouchard](mailto:denis.fouchard@telecom-paris.fr), LTCI Télécom Paris.
 
+This repository is a heavily modified fork of the great work done by [Xiaoxin He et al](https://arxiv.org/abs/2402.07630). The original repository can be found [here](https://github.com/XiaoxinHe/G-Retriever?tab=readme-ov-file).
+
+## Dependencies
+Requires Python 3.11 or later.
+
+```
+python -m venv venv
+pip install -r requirements
+```
 ## Data Preparation
 ```
 python -m src.dataset.indexing.dbpedia
@@ -10,16 +20,26 @@ python -m src.dataset.dbpedia
 Replace path to the llm checkpoints in the `src/model/__init__.py`, then run
 
 
-### 1) Frozen LLM + Prompt Tuning
+### 1) GraphLLM - Frozen LLM
 ```
-# prompt tuning
-python train.py --dataset scene_graphs_baseline --model_name pt_llm
-
-# G-Retriever
-python train.py --dataset scene_graphs --model_name graph_llm
+python train.py --dataset dbpedia --model_name graph_llm --frozen_llm True ...
 ```
 
-### 2) Tuned LLM
+### 2) GraphLLM - Tuned LLM
 ```
-python train.py --dataset dbpedia --model_name graph_llm_classifier --llm_frozen False
+python train.py --dataset dbpedia --model_name graph_llm_classifier --llm_frozen False ...
 ```
+### 3) GNN Classifier
+```
+python train_gnn.py --dataset dbpedia ...
+```
+
+For more options during training, see `config.py`.
+
+## Available Models
+See `src/model/__init__.py` for available models.
+- GraphLLM : LLM with GNN encoder, no classification head
+- GraphLLMClassifier : LLM with GNN encoder, classification head
+- GNNClassifier : Bert-like model with GNN encoder
+- LLMClassifier : LLM with classification head only
+

@@ -46,17 +46,29 @@ class DBPediaDataset(Dataset):
         get_idx_split(): Returns the indices for train, validation, and test splits.
     """
 
-    def __init__(self, version: str = "", retrieval: bool = True, summary: bool = True):
+    def __init__(
+        self,
+        version: str = "",
+        retrieval: bool = True,
+        summary: bool = True,
+        entity_desc: bool = False,
+    ):
         super().__init__()
         self.path = f"/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia{version}"
         self.nodes_dir = f"{self.path}/nodes"
         self.edges_dir = f"{self.path}/edges"
         self.graphs_dir = f"{self.path}/graphs"
         self.retrieval = retrieval
+        self.entity_desc = entity_desc
         self.version = version
+
+        self.desc_dir = ""
+        if entity_desc:
+            self.desc_dir = f"{self.path}/desc"
 
         self.cached_graph_dir = ""
         self.cached_desc_dir = ""
+        self.description_dir = ""
         self.class2idx, self.idx2class = generate_hierarchical_mapping(
             f"{self.path}/hierarchy_ids.txt"
         )
@@ -137,7 +149,7 @@ class DBPediaDataset(Dataset):
         print("Number of samples per class:")
         n_sample_per_class = {c: 0 for c in self.classes}
         for item in self.dataset:
-            n_sample_per_class[item["answer"]] += 1
+            n_sample_per_class[item["class"]] += 1
         for c, n in n_sample_per_class.items():
             if n > 0:
                 rep_classes += 1
@@ -145,6 +157,26 @@ class DBPediaDataset(Dataset):
         print(
             f"Number of classes represented: {rep_classes} ({100*rep_classes/len(self.classes)}%)"
         )
+
+    def summary_dict(self) -> dict:
+        """
+        Return a summary of the dataset as a dictionary.
+        """
+        rep_classes = 0
+        summary = {
+            "n_samples": len(self.dataset),
+            "n_classes": len(self.classes),
+            "n_q_embs": len(self.q_embs),
+            "graph_type": self.graph_type,
+            "n_samples_per_class": {c: 0 for c in self.classes},
+        }
+        for item in self.dataset:
+            summary["n_samples_per_class"][item["class"]] += 1
+        for c, n in summary["n_samples_per_class"].items():
+            if n > 0:
+                rep_classes += 1
+        summary["n_rep_classes"] = rep_classes
+        return summary
 
     def __getitem__(self, index) -> dict:
         """
@@ -157,13 +189,14 @@ class DBPediaDataset(Dataset):
             dict: A dictionary containing the following keys:
                 - "id" (int): The index of the item.
                 - "question" (str): The formatted question string.
-                - "label" (str): The answer label.
+                - "label" (str): The class label.
                 - "graph" (torch.Tensor): The graph data loaded from a file.
                 - "desc" (str): The description text loaded from a file (empty if retrieval is False).
         """
         item = self.dataset[index]
-        entity = item["q_entity"]
+        entity = item["entity"]
         question = f'## Instructions\n {self.prompt}\n ## Question\n {item["question"]}'
+        desc = ""
         if self.retrieval:
             graph = torch.load(f"{self.cached_graph_dir}/{index}.pt")
             desc = open(
@@ -173,7 +206,13 @@ class DBPediaDataset(Dataset):
         else:
             graph = torch.load(f"{self.graphs_dir}/{index}.pt")
             desc = ""
-        label = item["answer"]
+        label = item["class"]
+
+        if self.entity_desc:
+            desc = open(
+                f"{self.desc_dir}/{index}.txt",
+                "r",
+            ).read()
 
         return {
             "id": index,
