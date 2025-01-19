@@ -18,7 +18,7 @@ python -m src.dataset.dbpedia
 
 ## Training
 Replace path to the llm checkpoints in the `src/model/__init__.py`, then run
-
+If you want to train a model with a Bert-like model, you should use the `train_bert.py` script instead ! 
 
 ### 1) GraphLLM - Frozen LLM
 ```
@@ -34,12 +34,12 @@ python train.py --dataset dbpedia --model_name graph_llm_classifier --llm_frozen
 python train_gnn.py --dataset dbpedia ...
 ```
 
-For more options during training, see `config.py`.
+For more options during training, see `src/config.py`.
 
 ## Available Models
 See `src/model/__init__.py` for available models.
 - GraphLLM : LLM with GNN encoder, no classification head
 - GraphLLMClassifier : LLM with GNN encoder, classification head
-- GNNClassifier : Bert-like model with GNN encoder
+- GraphBertClassifier : Bert-like model with GNN encoder
 - LLMClassifier : LLM with classification head only
 

@@ -11,6 +11,7 @@ from src.model import llama_model_path
 from src.model.graph_llm_classifier import GraphLLMClassifier
 from src.dataset.dbpedia import DBPediaDataset
 from src.utils.collate import collate_fn
+from sklearn.metrics import f1_score
 
 # Define the number of classes, and do one-hot encoding for the labels
 
@@ -86,6 +87,12 @@ def main(args, path=None, test_loader=None, model=None, checkpoint_path=None):
     acc = sum(test_accuracies) / len(test_accuracies)
     print(f"Test Accuracy {acc}")
     wandb.log({"Test Acc": acc})
+
+    # Compute F1 Micro and Macro
+    f1_micro = f1_score(true_labels, pred_labels, average="micro")
+    f1_macro = f1_score(true_labels, pred_labels, average="macro")
+    print(f"F1 Micro: {f1_micro}, F1 Macro: {f1_macro}")
+    wandb.log({"F1 Micro": f1_micro, "F1 Macro": f1_macro})
 
     # Save the results to a csv file
     results = pd.DataFrame({"true_labels": true_labels, "pred_labels": pred_labels})

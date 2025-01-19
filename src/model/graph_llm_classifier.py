@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.model.base_classifier import BaseClassifier
+from src.model.base_classifier import EntityClassifier
 from transformers import (
     LlamaModel,
     AutoTokenizer,
@@ -36,7 +36,7 @@ class ClassificationHead(nn.Module):
         return self.mlp(last_hidden_state)
 
 
-class GraphLLMClassifier(BaseClassifier):
+class GraphLLMClassifier(EntityClassifier):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()
@@ -233,24 +233,6 @@ class GraphLLMClassifier(BaseClassifier):
         output = self.classifier.forward(hidden_states)
 
         return output
-
-    def predict(self, samples) -> torch.Tensor:
-        with torch.no_grad():
-            outputs = self.forward(samples)
-            return torch.argmax(outputs, dim=-1)
-
-    def print_trainable_params(self) -> tuple[int, int]:
-        trainable_params = 0
-        all_param = 0
-
-        for _, param in self.named_parameters():
-            num_params = param.numel()
-
-            all_param += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-
-        return trainable_params, all_param
 
     @staticmethod
     def from_pretrained(args, n_classes, model_path) -> "GraphLLMClassifier":

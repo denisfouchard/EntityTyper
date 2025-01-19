@@ -4,7 +4,7 @@ from transformers import (
     LlamaModel,
     AutoTokenizer,
 )
-from src.model.base_classifier import BaseClassifier
+from src.model.base_classifier import EntityClassifier
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -35,7 +35,7 @@ class ClassificationHead(nn.Module):
         return self.mlp(last_hidden_state)
 
 
-class LLMClassifier(BaseClassifier):
+class LLMClassifier(EntityClassifier):
     """No Graph encoding. Only LLM model for classification"""
 
     def __init__(self, args, n_classes: int, **kwargs):
@@ -183,19 +183,6 @@ class LLMClassifier(BaseClassifier):
         with torch.no_grad():
             outputs = self.forward(samples)
             return torch.argmax(outputs, dim=-1)
-
-    def print_trainable_params(self) -> tuple[int, int]:
-        trainable_params = 0
-        all_param = 0
-
-        for _, param in self.named_parameters():
-            num_params = param.numel()
-
-            all_param += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-
-        return trainable_params, all_param
 
     @staticmethod
     def from_pretrained(args, n_classes, model_path) -> "LLMClassifier":

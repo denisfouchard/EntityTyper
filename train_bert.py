@@ -6,49 +6,36 @@ import gc
 import torch
 from tqdm import tqdm
 from torch.amp import autocast
-from src.model import llama_model_path
-from src.model.gnn_classifier import GNNClassifier
+from src.model.graph_bert_classifier import GraphBertClassifier
 from src.dataset.dbpedia import DBPediaDataset
 from src.config import parse_args_llama
 from src.utils.checkpoint import save_checkpoint
 from src.utils.collate import collate_fn
 from src.utils.seeding import seed_everything
 from src.utils.lr_scheduling import adjust_learning_rate
-from src.dataset.utils.mapping import generate_hierarchical_mapping
 from src.dataset.utils.dataloader import dataset_loader
 import wandb
 
-# Define the number of classes, and do one-hot encoding for the labels
-class2idx, idx2class = generate_hierarchical_mapping(
-    file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia60k/hierarchy_ids.txt"
-)
-n_classes = len(idx2class)
-
-
-# Define the number of classes, and do one-hot encoding for the labels
-def batch_one_hot_encode(y_str: list[str], num_classes):
-    labels = [class2idx[c] for c in y_str]
-    one_hot = torch.zeros(len(labels), num_classes)
-    one_hot[range(len(labels)), labels] = 1
-    return one_hot
-
 
 def main(args: Namespace) -> None:
+    seed_everything(seed=args.seed)
     gc.collect()
     torch.cuda.empty_cache()
     # Step 1: Set up wandb
     wandb.init(
         project=f"{args.project}",
-        name=f"DBPedia60K - EntityDescription - SBert+BigMLP",
+        name="DBPedia60K - EntityDescription - SBert+BigMLP",
         config=args,
     )
-
-    seed_everything(seed=args.seed)
-    retrieval = args.retrieval == "True"
     entity_description = args.entity_description
     dataset = DBPediaDataset(
-        retrieval=retrieval, version="60k", entity_desc=entity_description
+        retrieval=args.retrieval,
+        version=args.dataset_version,
+        entity_desc=args.entity_description,
+        summary=False,
     )
+    class2idx, idx2class = dataset.class2idx, dataset.idx2class
+    n_classes = len(class2idx)
     args.model_name = "gnn_classifier"
     args.llm_model_name = "bert"
     args.batch_size = 32
@@ -57,7 +44,7 @@ def main(args: Namespace) -> None:
         dataset=dataset, args=args, collate_fn=collate_fn
     )
     # Step 3: Build Model
-    model = GNNClassifier(
+    model = GraphBertClassifier(
         args=args, n_classes=n_classes, entity_description=entity_description
     )
     print("Loaded BERT! (frozen)")

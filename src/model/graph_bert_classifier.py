@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.model.base_classifier import BaseClassifier
+from src.model.base_classifier import EntityClassifier
 from src.model.graph_encoder import GNN_MODEL_MAPPING, GraphEncoder
 from src.utils.lm_modeling import load_sbert_to_device
 from contextlib import contextmanager
@@ -34,7 +34,7 @@ class CustomClassificationMLP(nn.Module):
         return self.mlp(samples)
 
 
-class GNNClassifier(BaseClassifier):
+class GraphBertClassifier(EntityClassifier):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()
@@ -132,23 +132,12 @@ class GNNClassifier(BaseClassifier):
             outputs = self.forward(samples)
             return torch.argmax(outputs, dim=-1)
 
-    def print_trainable_params(self) -> tuple[int, int]:
-        trainable_params = 0
-        all_param = 0
-
-        for _, param in self.named_parameters():
-            num_params = param.numel()
-
-            all_param += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-
-        return trainable_params, all_param
-
     @staticmethod
-    def from_pretrained(args, n_classes, model_path) -> "GNNClassifier":
+    def from_pretrained(args, n_classes, model_path) -> "GraphBertClassifier":
         print(f"Loading model from {model_path}")
-        trained_graph_classifier: GNNClassifier = GNNClassifier(args, n_classes)
+        trained_graph_classifier: GraphBertClassifier = GraphBertClassifier(
+            args, n_classes
+        )
         checkpoint = torch.load(model_path)
         trained_graph_classifier.load_state_dict(checkpoint["model"], strict=False)
         print("Loaded model from checkpoint!")
@@ -159,7 +148,7 @@ if __name__ == "__main__":
     from src.config import parse_args_llama
 
     args = parse_args_llama()
-    model = GNNClassifier(args, 2)
+    model = GraphBertClassifier(args, 2)
     print(model)
     trainable_params, all_param = model.print_trainable_params()
     print(f"Trainable params: {trainable_params}, All params: {all_param}")
