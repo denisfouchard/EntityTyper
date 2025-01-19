@@ -9,7 +9,7 @@ from tqdm import tqdm
 from accelerate import infer_auto_device_map, dispatch_model
 from torch.amp import autocast
 from src.model import llama_model_path
-from src.model import CLASSIFIER_MODEL_MAPPING, BaseClassifier
+from src.model import CLASSIFIER_MODEL_MAPPING as MODEL_MAP, EntityClassifier
 from src.dataset.dbpedia import DBPediaDataset
 from src.config import parse_args_llama
 from src.utils.checkpoint import save_checkpoint
@@ -19,6 +19,7 @@ from src.utils.lr_scheduling import adjust_learning_rate
 from src.dataset.utils.mapping import generate_hierarchical_mapping
 from src.dataset.utils.dataloader import dataset_loader
 import wandb
+from sklearn.metrics import f1_score
 
 # Define the number of classes, and do one-hot encoding for the labels
 class2idx, idx2class = generate_hierarchical_mapping(
@@ -39,20 +40,21 @@ def main(args: Namespace) -> None:
     gc.collect()
     torch.cuda.empty_cache()
     # Step 1: Set up wandb
-    name = "DBPedia60K - No GNN - Frozen LLM"
+    name = "DBPedia60K - GNN + Frozen LLM"
     wandb.init(
         project=f"{args.project}",
         name=name,
         config=args,
     )
-    Classifier: BaseClassifier = CLASSIFIER_MODEL_MAPPING[args.model_name]
+    entity_classifier: EntityClassifier = MODEL_MAP[args.model_name]
     args.model_name = name.replace(" ", "")
 
     seed_everything(seed=args.seed)
-    retrieval = args.retrieval == "True"
-    entity_description = args.entity_description
     dataset = DBPediaDataset(
-        retrieval=retrieval, version="60k", entity_desc=entity_description
+        retrieval=args.retrieval,
+        version=args.dataset_version,
+        entity_desc=args.entity_description,
+        summary=False,
     )
     train_loader, val_loader, test_loader = dataset_loader(
         dataset=dataset, args=args, collate_fn=collate_fn
@@ -60,11 +62,11 @@ def main(args: Namespace) -> None:
     # Step 3: Build Model
     args.llm_model_path = llama_model_path[args.llm_model_name]
     if args.checkpoint_path != "":
-        model = Classifier.from_pretrained(
+        model = entity_classifier.from_pretrained(
             args=args, n_classes=n_classes, model_path=args.checkpoint_path
         )
     else:
-        model = Classifier(args=args, n_classes=n_classes)
+        model = entity_classifier(args=args, n_classes=n_classes)
 
     accelerate = False
     if accelerate:
@@ -207,6 +209,11 @@ def main(args: Namespace) -> None:
     acc = sum(test_accuracies) / len(test_accuracies)
     print(f"Test Accuracy {acc}")
     wandb.log({"Test Acc": acc})
+    # Compute F1 Micro and Macro
+    f1_micro = f1_score(true_labels, pred_labels, average="micro")
+    f1_macro = f1_score(true_labels, pred_labels, average="macro")
+    print(f"F1 Micro: {f1_micro}, F1 Macro: {f1_macro}")
+    wandb.log({"F1 Micro": f1_micro, "F1 Macro": f1_macro})
 
     # Save the results to a csv file
     results = pd.DataFrame({"true_labels": true_labels, "pred_labels": pred_labels})

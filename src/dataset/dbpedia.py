@@ -49,7 +49,7 @@ class DBPediaDataset(Dataset):
     def __init__(
         self,
         version: str = "",
-        retrieval: bool = True,
+        retrieval: bool = False,
         summary: bool = True,
         entity_desc: bool = False,
     ):

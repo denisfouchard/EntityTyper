@@ -2,7 +2,7 @@ import torch
 
 
 # This is a abstract class that is not used in the codebase
-class BaseClassifier(torch.nn.Module):
+class EntityClassifier(torch.nn.Module):
     def forward(self, samples):
         raise NotImplementedError
 

@@ -4,7 +4,7 @@ from transformers import (
     LlamaModel,
     AutoTokenizer,
 )
-from src.model.base_classifier import BaseClassifier
+from src.model.base_classifier import EntityClassifier
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -35,7 +35,7 @@ class ClassificationHead(nn.Module):
         return self.mlp(last_hidden_state)
 
 
-class LLMClassifier(BaseClassifier):
+class LLMClassifier(EntityClassifier):
     """No Graph encoding. Only LLM model for classification"""
 
     def __init__(self, args, n_classes: int, **kwargs):

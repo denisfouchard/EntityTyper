@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.model.base_classifier import BaseClassifier
+from src.model.base_classifier import EntityClassifier
 from transformers import (
     LlamaModel,
     AutoTokenizer,
@@ -36,7 +36,7 @@ class ClassificationHead(nn.Module):
         return self.mlp(last_hidden_state)
 
 
-class GraphLLMClassifier(BaseClassifier):
+class GraphLLMClassifier(EntityClassifier):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()

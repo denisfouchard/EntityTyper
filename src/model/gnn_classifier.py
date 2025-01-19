@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.model.base_classifier import BaseClassifier
+from src.model.base_classifier import EntityClassifier
 from src.model.graph_encoder import GNN_MODEL_MAPPING, GraphEncoder
 from src.utils.lm_modeling import load_sbert_to_device
 from contextlib import contextmanager
@@ -34,7 +34,7 @@ class CustomClassificationMLP(nn.Module):
         return self.mlp(samples)
 
 
-class GNNClassifier(BaseClassifier):
+class GNNClassifier(EntityClassifier):
 
     def __init__(self, args, n_classes: int, **kwargs):
         super().__init__()

@@ -8,11 +8,12 @@ def csv_list(string):
 def parse_args_llama() -> Namespace:
     parser = ArgumentParser(description="G-Retriever")
 
-    parser.add_argument("--model_name", type=str, default="llm")
+    parser.add_argument("--model_name", type=str, default="graph_llm")
     parser.add_argument("--project", type=str, default="DBPediaTyping")
     parser.add_argument("--seed", type=int, default=0)
 
-    parser.add_argument("--dataset", type=str, default="dbpedia60k")
+    parser.add_argument("--dataset", type=str, default="dbpedia")
+    parser.add_argument("--dataset_version", type=str, default="60k")
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--wd", type=float, default=0.05)
     parser.add_argument("--patience", type=float, default=2)
@@ -29,7 +30,7 @@ def parse_args_llama() -> Namespace:
     parser.add_argument("--eval_batch_size", type=int, default=10)
 
     # Retrieval related
-    parser.add_argument("--retrieval", type=str, default="False")
+    parser.add_argument("--retrieval", type=bool, default=False)
 
     # Description related
     parser.add_argument("--entity_description", type=bool, default=False)
