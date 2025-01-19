@@ -72,6 +72,7 @@ wandb/
 
 .vscode/
 lib64
+.flake8
 pyvenv.cfg
 share/man/man1/isympy.1
 share/man/man1/ipython.1

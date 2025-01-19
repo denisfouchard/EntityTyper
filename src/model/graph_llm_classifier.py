@@ -234,24 +234,6 @@ class GraphLLMClassifier(EntityClassifier):
 
         return output
 
-    def predict(self, samples) -> torch.Tensor:
-        with torch.no_grad():
-            outputs = self.forward(samples)
-            return torch.argmax(outputs, dim=-1)
-
-    def print_trainable_params(self) -> tuple[int, int]:
-        trainable_params = 0
-        all_param = 0
-
-        for _, param in self.named_parameters():
-            num_params = param.numel()
-
-            all_param += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-
-        return trainable_params, all_param
-
     @staticmethod
     def from_pretrained(args, n_classes, model_path) -> "GraphLLMClassifier":
         print(f"Loading model from {model_path}")

@@ -16,29 +16,18 @@ from src.utils.checkpoint import save_checkpoint
 from src.utils.collate import collate_fn
 from src.utils.seeding import seed_everything
 from src.utils.lr_scheduling import adjust_learning_rate
-from src.dataset.utils.mapping import generate_hierarchical_mapping
 from src.dataset.utils.dataloader import dataset_loader
 import wandb
 from sklearn.metrics import f1_score
 
-# Define the number of classes, and do one-hot encoding for the labels
-class2idx, idx2class = generate_hierarchical_mapping(
-    file_path="/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia60k/hierarchy_ids.txt"
-)
-n_classes = len(idx2class)
-
-
-# Define the number of classes, and do one-hot encoding for the labels
-def batch_one_hot_encode(y_str: list[str], num_classes):
-    labels = [class2idx[c] for c in y_str]
-    one_hot = torch.zeros(len(labels), num_classes)
-    one_hot[range(len(labels)), labels] = 1
-    return one_hot
-
 
 def main(args: Namespace) -> None:
+
+    # Step 0: Set up the seed and the device
+    seed_everything(seed=args.seed)
     gc.collect()
     torch.cuda.empty_cache()
+
     # Step 1: Set up wandb
     name = "DBPedia60K - GNN + Frozen LLM"
     wandb.init(
@@ -46,20 +35,24 @@ def main(args: Namespace) -> None:
         name=name,
         config=args,
     )
-    entity_classifier: EntityClassifier = MODEL_MAP[args.model_name]
+
+    # Step 2: Load the dataset
     args.model_name = name.replace(" ", "")
 
-    seed_everything(seed=args.seed)
     dataset = DBPediaDataset(
         retrieval=args.retrieval,
         version=args.dataset_version,
         entity_desc=args.entity_description,
         summary=False,
     )
+    class2idx, idx2class = dataset.class2idx, dataset.idx2class
+    n_classes = len(class2idx)
     train_loader, val_loader, test_loader = dataset_loader(
         dataset=dataset, args=args, collate_fn=collate_fn
     )
+
     # Step 3: Build Model
+    entity_classifier: EntityClassifier = MODEL_MAP[args.model_name]
     args.llm_model_path = llama_model_path[args.llm_model_name]
     if args.checkpoint_path != "":
         model = entity_classifier.from_pretrained(
@@ -76,10 +69,8 @@ def main(args: Namespace) -> None:
         model = dispatch_model(model, device_map=device_map)
     print("Loaded model on device", model.device)
 
-    # Step 4.a Set loss function
+    # Step 4 : Training Setup
     criterion = torch.nn.CrossEntropyLoss()
-
-    # Step 4.b Set Optimizer
     params = [p for _, p in model.named_parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(
         [
@@ -89,7 +80,7 @@ def main(args: Namespace) -> None:
     )
     trainable_params, all_param = model.print_trainable_params()
     print(
-        f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}" # noqa
     )
 
     # Step 5. Training
@@ -165,7 +156,7 @@ def main(args: Namespace) -> None:
                     val_loss.append(loss.item())
             val_loss = sum(val_loss) / len(val_loss)
             print(
-                f"Epoch {epoch}|{args.num_epochs} Val Loss: {val_loss}, Best Val Loss: {best_val_loss}"
+                f"Epoch {epoch}|{args.num_epochs} Val Loss: {val_loss}, Best Val Loss: {best_val_loss}" # noqa
             )
             wandb.log({"Val Loss": val_loss})
 
@@ -181,11 +172,11 @@ def main(args: Namespace) -> None:
         torch.cuda.empty_cache()
         gc.collect()
 
-    # Step 5. Evaluating
+    # Step 6. Evaluating
     print("==== Evaluating ====")
     os.makedirs(f"{args.output_dir}/{args.dataset}/evaluation/", exist_ok=True)
 
-    path = f"{args.output_dir}/{args.dataset}/evaluation/Results-{name.replace(" ", "")}.csv"
+    path = f"{args.output_dir}/{args.dataset}/evaluation/Results-{name.replace(" ", "")}.csv" # noqa
     print(f"Results saving path: {path}")
     model.eval()
     progress_bar_test = tqdm(range(len(test_loader)))
@@ -195,14 +186,14 @@ def main(args: Namespace) -> None:
     pred_labels = []
     for _, batch in enumerate(test_loader):
         # Append the list of true labels to the dataframe column
-        true_labels.extend([l for l in batch["label"]])
+        true_labels.extend([label for label in batch["label"]])
         y_true = torch.tensor([class2idx[c] for c in batch["label"]]).to(model.device)
         with torch.no_grad():
             y_pred = model.predict(batch)
             batch_accuracy = torch.mean((y_pred == y_true).float())
             test_accuracies.append(batch_accuracy.item())
 
-        pred_labels.extend([l for l in [idx2class[i] for i in y_pred]])
+        pred_labels.extend([label for label in [idx2class[i] for i in y_pred]])
 
         progress_bar_test.update(1)
 
@@ -221,7 +212,7 @@ def main(args: Namespace) -> None:
 
 
 if __name__ == "__main__":
-    args: Namespace = parse_args_llama()
-    main(args=args)
+    config_args: Namespace = parse_args_llama()
+    main(args=config_args)
     torch.cuda.empty_cache()
     gc.collect()

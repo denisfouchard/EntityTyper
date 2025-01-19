@@ -1,15 +1,12 @@
 import contextlib
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast as autocast
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from src.model.graph_encoder import GNN_MODEL_MAPPING
 from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_kbit_training,
-    PeftModel,
-    PeftConfig,
 )
 
 BOS = "<s>[INST]"
@@ -104,7 +101,7 @@ class GraphLLM(torch.nn.Module):
         enable_autocast = self.device != torch.device("cpu")
 
         if enable_autocast:
-            return torch.cuda.amp.autocast(dtype=dtype)
+            return torch.autocast(dtype=dtype)
         else:
             return contextlib.nullcontext()
 
@@ -280,16 +277,3 @@ class GraphLLM(torch.nn.Module):
             "question": samples["question"],
             "desc": samples["desc"],
         }
-
-    def print_trainable_params(self):
-        trainable_params = 0
-        all_param = 0
-
-        for _, param in self.named_parameters():
-            num_params = param.numel()
-
-            all_param += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-
-        return trainable_params, all_param

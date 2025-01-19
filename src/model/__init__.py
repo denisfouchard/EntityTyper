@@ -1,4 +1,4 @@
-from .gnn_classifier import GNNClassifier
+from .graph_bert_classifier import GraphBertClassifier
 from .llm_classifier import LLMClassifier
 from .graph_llm_classifier import GraphLLMClassifier
 from .base_classifier import EntityClassifier
@@ -10,7 +10,7 @@ llama_model_path = {
 
 
 CLASSIFIER_MODEL_MAPPING: dict[str, EntityClassifier] = {
-    "gnn": GNNClassifier,
+    "gnn": GraphBertClassifier,
     "llm": LLMClassifier,
     "graph_llm": GraphLLMClassifier,
 }
