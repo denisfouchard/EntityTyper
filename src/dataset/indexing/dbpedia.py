@@ -9,7 +9,7 @@ from torch_geometric.data import Data
 from src.utils.lm_modeling import load_model, load_text2embedding
 from joblib import Parallel, delayed
 
-MODELNAME = "sbert"
+MODELNAME = "sbert" # Model for retrieval indexing
 CSV_PATH = "/home/infres/dfouchard-21/G-Retriever/dataset/dbpedia60k/DBPediaQA60K.csv"
 PATH = "dataset/dbpedia60k"
 path_nodes = f"{PATH}/nodes"
