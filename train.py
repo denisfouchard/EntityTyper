@@ -37,8 +37,6 @@ def main(args: Namespace) -> None:
     )
 
     # Step 2: Load the dataset
-    args.model_name = name.replace(" ", "")
-
     dataset = DBPediaDataset(
         retrieval=args.retrieval,
         version=args.dataset_version,
