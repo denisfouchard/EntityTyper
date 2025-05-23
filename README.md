@@ -1,7 +1,11 @@
 # GNNxLLM for Entity Typing
 Author: [Denis Fouchard](mailto:denis.fouchard@telecom-paris.fr), LTCI Télécom Paris.
 
-This repository is a heavily modified fork of the great work done by [Xiaoxin He et al](https://arxiv.org/abs/2402.07630). The original repository can be found [here](https://github.com/XiaoxinHe/G-Retriever?tab=readme-ov-file).
+This repository hosts code for my Master Thesis project (PRIM) at Télécom Paris/LTCI, supervised by [Mehwish Alam](https://sites.google.com/view/mehwish-alam/home).
+
+Final Grade : A - GPA 4.0/4.0
+
+The codebase is a heavily modified fork of the great work done by [Xiaoxin He et al](https://arxiv.org/abs/2402.07630). The original repository can be found [here](https://github.com/XiaoxinHe/G-Retriever?tab=readme-ov-file).
 
 ## Dependencies
 Requires Python 3.11 or later.
